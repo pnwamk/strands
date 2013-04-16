@@ -1,0 +1,45 @@
+Details for Coq translation:
+(Lexographical ordering)
+
+
+_BUNDLE_
+- A bundle is a portion of a strand space - a number of strands 
+hooked together where one strand sends a message and another 
+strand receives that same message.
+
+
+_CORRECTNESS_
+- Typically, for a protocol to be correct, each such bundle must 
+contain one strand for each of the legitimate principals apparently
+participating in this session, all agreeing on the principals,
+nonces, and session keys [15, 26, 32]. (Penetrator strands or stray
+legit strands may be tangled in the bundle, but do not compromise
+data/secrecy etc...)
+- Protocol correctness typically depends essentially on the freshness of 
+data items such as nonces and session keys. For this reason, the strand 
+spaces that concern us are not full, in the sense that they do not contain 
+all the strands that would arise if all possible data items were used.
+the space models the assumption that some values occur only freshly by including 
+only one strand *originating* that data item by initially sending a 
+message containing it
+
+_PRINCIPAL_
+
+
+_STRAND_
+- A strand is a linear structure, a sequence of one principal’s message 
+transmissions and receptions. A bundle is a graph-structured entity, 
+representing the communication among a number of strands.
+Composed of:
+Principal (whose strand it is)
+sequence of TX/RX events
+Other important details
+There is a notion of what strand/nodes these TX/RX events are linked to?
+
+
+_STRAND SPACE_
+-Strand Space := Set of Strands (honest and dishonest)
+
+
+
+Also, model some values are *impossible to guess* by penetrators.
