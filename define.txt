@@ -27,6 +27,7 @@ _PRINCIPAL_
 
 
 _STRAND_
+- Sequence of events (representing execution/actions)
 - A strand is a linear structure, a sequence of one principal’s message 
 transmissions and receptions. A bundle is a graph-structured entity, 
 representing the communication among a number of strands.
