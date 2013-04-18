@@ -40,6 +40,10 @@ This method:
 - gives detailed insight into reasons why protocol is correct and the involved
   assumptions.
 
+*Q: Things remaining to be solidified or explored?
+"The problem remains to determine which relations among the elements of the
+free algebra A' will preserve a protocol correctness result."
+
 
 *** RELEVANCE ***
 *Q: How does this relate to or affect my work?

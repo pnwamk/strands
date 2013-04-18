@@ -16,6 +16,16 @@ _BUNDLE_
   (pg 5 "Strand Spaces: Proving...")
 - has a natural causal precedence relation relative to which inductive
   arguments may be carried out (pg 5 "Strand Spaces: Proving...")
+- A finite subgraph of the graph (N, (-> U =>)) where the edges express
+  causal dependencies of the nodes.
+- Definition (Def 2.4 pg 7 "Strand Spaces: Proving...")
+-- C = (Nc, (->c U =>c)), which is a subgraph of (N, (-> U =>)) is
+   a bundle if:
+--- C is finite
+--- if n2 in Nc and term(n2) is negative, there is a unique n1 s.t.
+    n1 ->c n2
+--- If n2 in Nc and n1 => n2 then n1 =>c n2
+--- C is acyclic
 
 _CORRECTNESS_
 - typically, to be correct, each bundle in a strand space must contain one strand
@@ -53,3 +63,49 @@ _STRAND_
 _STRAND SPACE_
 - A set of strands (both legitimate and penetrator)
   (pg 3 & 4 "Strand Spaces: Proving...")
+- A Strand Space over a set of terms A is a set E together with a trace mapping
+  tr: E -> (+/-A)*.
+  (pg 6 "Strand Spaces: Proving...")
+- Formal Definition (Def 2.3 pg 6 "Strand Spaces: Proving..."):
+-- A _NODE_ is a pair [s, i] where s from E and i s.t. 1 <= 1 <= len(tr(s)),
+    and N is the set of all nodes
+-- Node [s, i] belongs to strand s
+-- every node belongs to a unique strand
+-- if n = [s, i] from N then:
+--- index(n) = i
+--- strand(n) = s
+--- term(n) = tr(s)[i] (i.e. the ith signed term in the trace of s)
+--- uns_term(n) = tr(s)[i][2] (i.e. the unsigned ith term in trace)
+-- an _EDGE_ n -> m exists iff term(n) = +a and term(nm) = -a for
+   some a in A - thus showing a potential causal link between those
+   strands
+-- an _EDGE_ n1 => n2 when n1 = [s, i] and n2 = [s, i + 1], expressing
+   n1 is the immediate causal predecessor of n2 on strand s.
+-- n' =>+ n means n' precedes n (at some point) on the same strand
+-- An unsigned term t occurs in n from N iff t is a subterm of term(n)
+-- Suppose I is a set of unsigned terms, then node n from N is an _ENTRY POINT_
+   for I iff term(n) = +t for some t in I, and whenever n' =>+ n, 
+   term(n') is not in I.
+-- An unsigned term t originates on n from N iff n is an entry point for the
+   set I = {t' : t subterm of t'}
+-- An unsigned term t is uniquely originating iff t originates on a unique n in N.
+-- N (set of nodes) combined w/ sets of edges (-> and =>) is a directed graph
+   (N, (-> U =>))
+   
+
+
+
+_TERM_
+- possible message that can be exchanged between principals in a protocol
+  (pg 5 "Strand Spaces: Proving...")
+- a subterm relation can exist between different terms
+  (pg 5 "Strand Spaces: Proving...")
+- any term a in the set of all terms A can be annotated as (+, a) or
+  (-, a) representing the term a tx'd or rx'd
+  (pg 6 "Strand Spaces: Proving...")
+
+_TRANSMISSION_
+- a strand (process) may tx or rx a msg, but not both simultaneously
+- when a strand receives msg m, there is a unique node transmitting
+  m from which the msg was immediately rx'd
+- when msg m is tx'd, many strands my immediately rx m
