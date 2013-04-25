@@ -1,8 +1,7 @@
 (** * strands.v: Basic Strand Space Definitions *)
 
-(* Created         20130418   Andrew Kent (amk.kent@gmail.com) 
-   Last Modified   20130424   Andrew Kent (amk.kent@gmail.com)
-   
+(* Created by Andrew Kent (amk.kent@gmail.com) 
+   Brigham Young University
 *)
 
 (* Source Material(s): 
@@ -25,11 +24,13 @@ Inductive msg : Type :=
          which will be added later (e.g. messages
          being composed of numerous sub pieces) *)
 
+(* subterm relationship for messages *)
+(* sub term -> larger encapsulating term -> Prop *)
 Definition subterm := msg -> msg -> Prop.
 (* REF Section 2.1 pg 5 
    TODO is further defined in section 2.3 *)
 
-(* signed msg, + (tx) or - (rx) *)
+(* signed message, + (tx) or - (rx) *)
 Inductive smsg : Type := 
  | tx : msg -> smsg
  | rx : msg -> smsg.
@@ -37,6 +38,7 @@ Inductive smsg : Type :=
    They are defined as a pair, w/ the first member being in {+, -} 
    and the second a signed message. *)
 
+(* strand *)
 Definition strand : Type := list smsg.
 (* REF First sentence of Abstract: "sequence of events"  
    Haven't hit a better def, and they start using strands
@@ -44,12 +46,12 @@ Definition strand : Type := list smsg.
 
 
 (* strand space *)
-(* Definition sspace : Set strand  *)
 Inductive sspace : Type :=
   | space : set msg -> set strand -> sspace.
 (* REF Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
     E with a trace mapping tr : E -> list smsg *)
 
+(* node in a strand space *)
 Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
 (* REF Definition 2.3.1 pg 6
    -"A node is a pair <s,i> where s is a strand and i a nat in [0, (length s))"
@@ -57,6 +59,9 @@ Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
    -"node <s,i> belongs to strand s"
    -"Every node belongs to a unique strand" *)
 
+(* Definition node_eq : TODO ? *)
+
+(* index of a node *)
 Definition n_index (n:node) : nat :=
 match n with
  | exist npair _ 
@@ -65,6 +70,7 @@ end.
 (* REF Definition 2.3.2 pg 6
    "If n = <s,i> then index(n) = i. *)
 
+(* strand of a node *)
 Definition n_strand (n:node) : strand :=
 match n with
  | exist npair _ 
@@ -73,7 +79,7 @@ end.
 (* REF Definition 2.3.2 pg 6
    "If n = <s,i> then ... strand(n) = s. *)
 
-
+(* signed message of a node *)
 Fixpoint n_smsg (n:node) : smsg :=
 match n with
  | exist npair p 
@@ -82,7 +88,7 @@ end.
 (* REF Definition 2.3.2 pg 6
    "Define term(n) to be the ith signed term of the trace of s." *)
 
-
+(* unsigned message of a node *)
 Fixpoint n_msg (n:node) : msg :=
 match n with
  | exist npair p 
@@ -94,4 +100,41 @@ end.
 (* REF Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
+
+(* communication or sending edge *)
+(* tx -> rx -> Prop *)
+Inductive comm_E : node -> node -> Prop :=
+ | commE : forall n m, (exists a, 
+                            (and ((n_smsg n) = (tx a)) 
+                                 ((n_smsg m) = (rx a))))
+                        -> comm_E n m.
+(* REF Definition 2.3.3 pg 6
+   "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a." *)
+
+(* a comm_E implies the tx and rx of a message a*)
+Definition comm_E_imp : Prop :=
+forall n m, comm_E n m 
+              -> exists a, (and ((n_smsg n) = (tx a)) 
+                                ((n_smsg m) = (rx a))).
+(* REF Definition 2.3.3 pg 6
+   "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a." *)
+
+(* predecessor edge *)
+(* node's direct predecessor -> node -> Prop *)
+Inductive pred_E : node -> node -> Prop :=
+ | predE : forall i j, n_strand i = n_strand j 
+                         -> (n_index i) + 1 = (n_index j) 
+                         -> pred_E i j.
+(* REF Definition 2.3.4 pg 6
+   "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
+    an edge n1 => n2." *)
+
+(* predecessor multi edge (not nec. immediate predecessor) *)
+(* node's predecessor -> node -> Prop *)
+Inductive predX_E : node -> node -> Prop :=
+ | predXE1 : forall i j, pred_E i j -> predX_E i j
+ | predXEX : forall i j k, pred_E i j -> predX_E j k -> predX_E i k.
+(* REF Definition 2.3.4 pg 6
+   "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
+    the same strand." *)
 
