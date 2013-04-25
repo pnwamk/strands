@@ -1,7 +1,7 @@
 (** * strands.v: Basic Strand Space Definitions *)
 
 (* Created         20130418   Andrew Kent (amk.kent@gmail.com) 
-   Last Modified   20130423   Andrew Kent (amk.kent@gmail.com)
+   Last Modified   20130424   Andrew Kent (amk.kent@gmail.com)
    
 *)
 
@@ -37,7 +37,7 @@ Inductive smsg : Type :=
    They are defined as a pair, w/ the first member being in {+, -} 
    and the second a signed message. *)
 
-Definition strand := list smsg.
+Definition strand : Type := list smsg.
 (* REF First sentence of Abstract: "sequence of events"  
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
@@ -50,9 +50,48 @@ Inductive sspace : Type :=
 (* REF Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
     E with a trace mapping tr : E -> list smsg *)
 
-Inductive  node : Type :=
- | nodec : strand -> {n:nat | n <> 0} -> node.
+Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
 (* REF Definition 2.3.1 pg 6
-   -"A node is a pair <s,i> where s is a strand and i a nat in [1, (len s)]"
+   -"A node is a pair <s,i> where s is a strand and i a nat in [0, (length s))"
+     NOTE: I changed it to be 0 based instead of 1 based sequences
    -"node <s,i> belongs to strand s"
    -"Every node belongs to a unique strand" *)
+
+Definition n_index (n:node) : nat :=
+match n with
+ | exist npair _ 
+   => snd npair
+end.
+(* REF Definition 2.3.2 pg 6
+   "If n = <s,i> then index(n) = i. *)
+
+Definition n_strand (n:node) : strand :=
+match n with
+ | exist npair _ 
+   => fst npair
+end.
+(* REF Definition 2.3.2 pg 6
+   "If n = <s,i> then ... strand(n) = s. *)
+
+
+Fixpoint n_smsg (n:node) : smsg :=
+match n with
+ | exist npair p 
+   =>  nth (snd npair) (fst npair)  (tx mterm) (* TODO default term... ? *)
+end. 
+(* REF Definition 2.3.2 pg 6
+   "Define term(n) to be the ith signed term of the trace of s." *)
+
+
+Fixpoint n_msg (n:node) : msg :=
+match n with
+ | exist npair p 
+   => match  nth (snd npair) (fst npair)  (tx mterm) with  (* TODO default term... ? *)
+       | tx t => t
+       | rx t => t
+      end
+end. 
+(* REF Definition 2.3.2 pg 6
+   "Define uns_term(n) to be the unsigned part of the ith signed term 
+    of the trace of s." *)
+
