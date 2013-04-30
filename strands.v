@@ -23,21 +23,31 @@ Inductive msg : Type :=
          which will be added later (e.g. messages
          being composed of numerous sub pieces) *)
 
-Axiom msg_eq_dec : forall x y : msg,  {x = y} + {x <> y}.
+Hint Constructors msg.
 
-Definition msg_in_set (m:msg) (s:set msg) : bool := set_mem msg_eq_dec m s.
+Definition msg_eq_dec : forall x y : msg,  
+  {x = y} + {x <> y}.
+Proof.
+ intros. decide equality. 
+Qed. 
+
+Definition msg_in_set (m:msg) (s:set msg) : bool := 
+  set_mem msg_eq_dec m s.
+
 
 (* subterm relationship for messages *)
 (* sub term -> larger encapsulating term -> Prop *)
 Inductive subterm : msg -> msg -> Prop :=
 | strefl : forall m, subterm m m
 (* | stcryp : forall a g, subterm a g -> subterm a encrpt(g)  *)
-| stcomp : forall a g h, (or (subterm a g)
-                             (subterm a h))
-                         -> subterm a (mcons g h).
+| stcomp_l : forall st l r, 
+               subterm st l -> subterm st (mcons l r)
+| stcomp_r : forall st l r, 
+               subterm st r -> subterm st (mcons l r).
 (* REF Definition 2.1 pg 6 and Definition 2.11 TODO Add more this was a jump ahead
     TODO the definition there reference a (by that point) defined notion
     of encryption - we'll have to come back and add this. *)
+Hint Constructors subterm.
 
 (* signed message, + (tx) or - (rx) *)
 Inductive smsg : Type := 
@@ -46,6 +56,13 @@ Inductive smsg : Type :=
 (* REF Definition 2.1 pg 6 
    They are defined as a pair, w/ the first member being in {+, -} 
    and the second a signed message. *)
+Hint Constructors smsg.
+
+Definition smsg_eq_dec : forall x y : smsg,  
+  {x = y} + {x <> y}.
+Proof.
+ intros. decide equality; apply msg_eq_dec.
+Qed. 
 
 (* strand *)
 Definition strand : Type := list smsg.
@@ -53,6 +70,14 @@ Definition strand : Type := list smsg.
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
+Definition strand_eq_dec : forall x y : strand,  
+  {x = y} + {x <> y}.
+Proof.
+ intros. decide equality. apply smsg_eq_dec. 
+Qed. 
+
+Definition strand_in_set (s:strand) (ss:set strand) : bool := 
+  set_mem strand_eq_dec s ss.
 
 (* strand space *)
 Inductive sspace : Type :=
@@ -60,7 +85,15 @@ Inductive sspace : Type :=
 (* REF Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
     E with a trace mapping tr : E -> list smsg *)
 
+Definition ss_msgs (ss:sspace) : set msg :=
+ match ss with
+  | space m_set s_set => m_set
+ end.
 
+Definition ss_strands (ss:sspace) : set strand :=
+ match ss with
+  | space m_set s_set => s_set
+ end.
 
 (* node in a strand space *)
 Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
@@ -71,8 +104,6 @@ Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
    -"Every node belongs to a unique strand" *)
 
 (* Definition node_eq : TODO ? *)
-
-
 
 (* index of a node *)
 Definition n_index (n:node) : nat :=
@@ -114,14 +145,19 @@ Fixpoint n_msg (n:node) : msg :=
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
-
+Inductive ss_node : node -> sspace -> Type :=
+ | ssnode : forall n ss, 
+            true = strand_in_set (n_strand n) (ss_strands ss) 
+            -> ss_node n ss.
+(* TODO REF 2.3.1 add info - is this right? *)
 
 (* communication or sending edge *)
-Axiom comm_E : node -> node -> Prop.
+Definition comm_E : node -> node -> Prop.  Admitted.
 Definition comm_E_iff : Prop :=
   forall n m, comm_E n m 
               <-> exists a, (and ((n_smsg n) = (tx a)) 
                                  ((n_smsg m) = (rx a))).
+
 (* REF Definition 2.3.3 pg 6
    "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a." *)
 
@@ -149,14 +185,14 @@ Inductive predX_E : node -> node -> Prop :=
 
 
 (* the notion that a msg occurs in a node (based on subterm's def) *)
-Axiom occurs_in : msg -> node -> Prop.
+Definition occurs_in : msg -> node -> Prop. Admitted.
 Definition occurs_in_iff : Prop :=
   forall m n, occurs_in m n <-> subterm m (n_msg n).
 (* REF Definition 2.3.5 pg  6
    "An unsigned term m occurs in a node n iff m is a subterm of term(n). " *)
 
 (* signifies the origin of a msg. *)
-Axiom entry_point : node -> set msg -> Prop.
+Definition entry_point : node -> set msg -> Prop. Admitted.
 Definition entry_point_iff : 
   forall n I, entry_point n I 
               <-> (and (exists m, (and ((n_smsg n) = (tx m)) 
@@ -168,7 +204,7 @@ Definition entry_point_iff :
     term(n) = +t for some t in I, and whenever n' =>+ n term(n') is not in I."*)
 
 (* where an unsigned term originates, what node *)
-Axiom origin_on : msg -> node -> Prop.
+Definition origin_on : msg -> node -> Prop. Admitted.
 Definition origin_on_iff :
 forall t n, origin_on t n
 <-> exists I, (and (entry_point n I)
@@ -178,7 +214,7 @@ forall t n, origin_on t n
     the set I = {t' | t is a subterm of t'}."*)
 
 (* uniquely originating term def, useful for nonces or session keys *)
-Axiom uniq_origin : msg -> Prop.
+Definition uniq_origin : msg -> Prop. Admitted.
 Definition uniq_origin_iff :
 forall t, uniq_origin t 
           <-> exists n, forall n', origin_on t n' -> n = n'.
@@ -187,3 +223,4 @@ forall t, uniq_origin t
     n in N." *)
 
 
+(* Definition bundle : *)
