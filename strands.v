@@ -103,7 +103,14 @@ Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
    -"node <s,i> belongs to strand s"
    -"Every node belongs to a unique strand" *)
 
-(* Definition node_eq : TODO ? *)
+Definition node_eq_dec : forall x y : node,
+ {x = y} + {x <> y}.
+Proof.
+ intros. (* decide equality. Fails *)
+Admitted.  (* TODO Fix equality or definition of node. *)
+
+Definition node_in_set (n:node) (ns: set node) : bool :=
+  set_mem node_eq_dec n ns.
 
 (* index of a node *)
 Definition n_index (n:node) : nat :=
@@ -145,11 +152,17 @@ Fixpoint n_msg (n:node) : msg :=
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
-Inductive ss_node : node -> sspace -> Type :=
- | ssnode : forall n ss, 
-            true = strand_in_set (n_strand n) (ss_strands ss) 
-            -> ss_node n ss.
-(* TODO REF 2.3.1 add info - is this right? *)
+(* To reason about the set of nodes in a strand space *)
+Definition node_in_ss (n:node) (ss:sspace) : bool := 
+ strand_in_set (n_strand n) (ss_strands ss).
+(* REF Definition 2.3.1 pg 6
+   The reference to the "set of nodes (N) in a given strand space." *)
+
+(* Set of all nodes in a strand space *)
+Definition nodeset (ss:sspace) : Type := {ns: set node | forall n, (true = node_in_ss n ss) 
+                                                                   <-> true = node_in_set n ns}.
+(* REF Definition 2.3.1 pg 6
+   The set of nodes (in a strand space) is denoted by N. *)
 
 (* communication or sending edge *)
 Definition comm_E : node -> node -> Prop.  Admitted.
