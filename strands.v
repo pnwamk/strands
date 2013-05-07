@@ -6,10 +6,15 @@
 
 (* Source Material(s): 
 
-Strand Spaces: Proving Security Protocols Correct.
+1) Strand Spaces: Proving Security Protocols Correct.
    F. Javier Thayer Fabrega, Jonathan C. Herzog, Joshua D. Guttman. 
    Journal of Computer Security, 7 (1999), pages 191-230.
    http://web.cs.wpi.edu/~guttman/pubs/jcs_strand_spaces.pdf
+
+2) Authentication tests and the structure of bundles.
+   Joshua D. Guttman, F. Javier Thayer, Theoretical Computer Science, 
+   v.283 n.2, p.333-380, June 14, 2002.
+   http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
 Require Import List ListSet Arith Omega.
@@ -17,8 +22,10 @@ Require Import List ListSet Arith Omega.
 (* message or term *)
 Inductive msg : Type :=
 | mterm : msg
-| mcons : msg -> msg -> msg. (* added for convenience, looking for 'strict' justification... *)
-(* REF Section 2.1 pg 5 *)
+| mcons : msg -> msg -> msg (* added for convenience, looking for 'strict' justification... *)
+| mcrypt : msg (* key *) -> msg -> msg. (* TODO is encryption best represented this way? *)
+(* [REF 1] Section 2.1 pg 5 *)
+(* [REF 2] pg 4 paragraph 3 (detains of encryption and subterms) *)
 (* TODO: Seems there is more structure to a message
          which will be added later (e.g. messages
          being composed of numerous sub pieces) *)
@@ -43,17 +50,20 @@ Inductive subterm : msg -> msg -> Prop :=
 | stcomp_l : forall st l r, 
                subterm st l -> subterm st (mcons l r)
 | stcomp_r : forall st l r, 
-               subterm st r -> subterm st (mcons l r).
-(* REF Definition 2.1 pg 6 and Definition 2.11 TODO Add more this was a jump ahead
+               subterm st r -> subterm st (mcons l r)
+| stcrpyt : forall st t key, 
+              subterm st t -> subterm st (mcrypt key t).
+(* [REF 1] Definition 2.1 pg 6 and Definition 2.11 TODO Add more this was a jump ahead
     TODO the definition there reference a (by that point) defined notion
-    of encryption - we'll have to come back and add this. *)
+    of encryption - we'll have to come back and add this. 
+   *)
 Hint Constructors subterm.
 
 (* signed message, + (tx) or - (rx) *)
 Inductive smsg : Type := 
 | tx : msg -> smsg
 | rx : msg -> smsg.
-(* REF Definition 2.1 pg 6 
+(* [REF 1] Definition 2.1 pg 6 
    They are defined as a pair, w/ the first member being in {+, -} 
    and the second a signed message. *)
 Hint Constructors smsg.
@@ -64,9 +74,10 @@ Proof.
  intros. decide equality; apply msg_eq_dec.
 Qed. 
 
+
 (* strand *)
 Definition strand : Type := list smsg.
-(* REF First sentence of Abstract: "sequence of events"  
+(* [REF 1] First sentence of Abstract: "sequence of events"  
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
@@ -82,7 +93,7 @@ Definition strand_in_set (s:strand) (ss:set strand) : bool :=
 (* strand space *)
 Inductive sspace : Type :=
 | space : set msg -> set strand -> sspace.
-(* REF Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
+(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
     E with a trace mapping tr : E -> list smsg *)
 
 Definition ss_msgs (ss:sspace) : set msg :=
@@ -95,22 +106,14 @@ Definition ss_strands (ss:sspace) : set strand :=
   | space m_set s_set => s_set
  end.
 
+
 (* node in a strand space *)
 Definition node : Type := {n: (prod strand nat) | (snd n) < (length (fst n))}.
-(* REF Definition 2.3.1 pg 6
+(* [REF 1] Definition 2.3.1 pg 6
    -"A node is a pair <s,i> where s is a strand and i a nat in [0, (length s))"
      NOTE: I changed it to be 0 based instead of 1 based sequences
    -"node <s,i> belongs to strand s"
    -"Every node belongs to a unique strand" *)
-
-Definition node_eq_dec : forall x y : node,
- {x = y} + {x <> y}.
-Proof.
- intros. (* decide equality. Fails *)
-Admitted.  (* TODO Fix equality or definition of node. *)
-
-Definition node_in_set (n:node) (ns: set node) : bool :=
-  set_mem node_eq_dec n ns.
 
 (* index of a node *)
 Definition n_index (n:node) : nat :=
@@ -118,7 +121,7 @@ Definition n_index (n:node) : nat :=
     | exist npair _ 
       => snd npair
   end.
-(* REF Definition 2.3.2 pg 6
+(* [REF 1] Definition 2.3.2 pg 6
    "If n = <s,i> then index(n) = i. *)
 
 (* strand of a node *)
@@ -127,7 +130,7 @@ Definition n_strand (n:node) : strand :=
     | exist npair _ 
       => fst npair
   end.
-(* REF Definition 2.3.2 pg 6
+(* [REF 1] Definition 2.3.2 pg 6
    "If n = <s,i> then ... strand(n) = s. *)
 
 (* signed message of a node *)
@@ -136,7 +139,7 @@ Fixpoint n_smsg (n:node) : smsg :=
     | exist npair p 
       =>  nth (snd npair) (fst npair)  (tx mterm) (* TODO default term... ? *)
   end. 
-(* REF Definition 2.3.2 pg 6
+(* [REF 1] Definition 2.3.2 pg 6
    "Define term(n) to be the ith signed term of the trace of s." *)
 
 (* unsigned message of a node *)
@@ -148,33 +151,48 @@ Fixpoint n_msg (n:node) : msg :=
            | rx t => t
          end
   end. 
-(* REF Definition 2.3.2 pg 6
+(* [REF 1] Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
+
+
+SearchAbout eq.
+
+Definition node_eq (x y :node) :=
+ ((n_smsg x) = (n_smsg y)) ->
+      ((n_strand x) = (n_strand y)) -> x = y.
+
+Definition node_eq_dec : forall x y : node,
+ {x = y} + {x <> y}.
+Proof.
+ intros.  remember (node_eq x y).
+ unfold node_eq in HeqP.
+ rewrite HeqP. (* decide equality. Fails *)
+Admitted.  (* TODO Fix equality or definition of node. *)
+
+Definition node_in_set (n:node) (ns: set node) : bool :=
+  set_mem node_eq_dec n ns.
+
+
 
 (* To reason about the set of nodes in a strand space *)
 Definition node_in_ss (n:node) (ss:sspace) : bool := 
  strand_in_set (n_strand n) (ss_strands ss).
-(* REF Definition 2.3.1 pg 6
+(* [REF 1] Definition 2.3.1 pg 6
    The reference to the "set of nodes (N) in a given strand space." *)
 
 (* Set of all nodes in a strand space *)
 Definition nodeset (ss:sspace) : Type := {ns: set node | forall n, (true = node_in_ss n ss) 
                                                                    <-> true = node_in_set n ns}.
-(* REF Definition 2.3.1 pg 6
+(* [REF 1] Definition 2.3.1 pg 6
    The set of nodes (in a strand space) is denoted by N. *)
 
-(* communication or sending edge *)
-Definition comm_E : node -> node -> Prop.  Admitted.
-Definition comm_E_iff : Prop :=
-  forall n m, comm_E n m 
-              <-> exists a, (and ((n_smsg n) = (tx a)) 
-                                 ((n_smsg m) = (rx a))).
-
-(* REF Definition 2.3.3 pg 6
+Inductive comm_E : node -> node -> Prop :=
+| commE :  forall n m, (exists a, (and ((n_smsg n) = (tx a)) 
+                                 ((n_smsg m) = (rx a))))
+                             -> comm_E n m.
+(* [REF 1] Definition 2.3.3 pg 6
    "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a." *)
-
-
 
 (* predecessor edge *)
 (* node's direct predecessor -> node -> Prop *)
@@ -182,7 +200,7 @@ Inductive pred_E : node -> node -> Prop :=
 | predE : forall i j, n_strand i = n_strand j 
                       -> (n_index i) + 1 = (n_index j) 
                       -> pred_E i j.
-(* REF Definition 2.3.4 pg 6
+(* [REF 1] Definition 2.3.4 pg 6
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
@@ -191,47 +209,41 @@ Inductive pred_E : node -> node -> Prop :=
 Inductive predX_E : node -> node -> Prop :=
 | predXE1 : forall i j, pred_E i j -> predX_E i j
 | predXEX : forall i j k, pred_E i j -> predX_E j k -> predX_E i k.
-(* REF Definition 2.3.4 pg 6
+(* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
 
-
-
-(* the notion that a msg occurs in a node (based on subterm's def) *)
-Definition occurs_in : msg -> node -> Prop. Admitted.
-Definition occurs_in_iff : Prop :=
-  forall m n, occurs_in m n <-> subterm m (n_msg n).
-(* REF Definition 2.3.5 pg  6
+Inductive occurs_in : msg -> node -> Prop :=
+| occursin : forall m n, subterm m (n_msg n) -> occurs_in m n.
+(* [REF 1] Definition 2.3.5 pg  6
    "An unsigned term m occurs in a node n iff m is a subterm of term(n). " *)
 
 (* signifies the origin of a msg. *)
-Definition entry_point : node -> set msg -> Prop. Admitted.
-Definition entry_point_iff : 
-  forall n I, entry_point n I 
-              <-> (and (exists m, (and ((n_smsg n) = (tx m)) 
-                                       (true = msg_in_set m I)))
-                       (forall n', (predX_E n' n) 
-                                   -> (false = msg_in_set (n_msg n') I))).
-(* REF Definition 2.3.6 pg 6
+Inductive entry_point : node -> set msg -> Prop :=
+ | entrypoint :  forall n I, 
+    (and (exists m, (and ((n_smsg n) = (tx m)) 
+                         (true = msg_in_set m I)))
+         (forall n', (predX_E n' n) 
+                     -> (false = msg_in_set (n_msg n') I)))
+    -> entry_point n I.
+(* [REF 1] Definition 2.3.6 pg 6
    "The node n in N is an entry point for I (a set of unsigned terms) iff
     term(n) = +t for some t in I, and whenever n' =>+ n term(n') is not in I."*)
 
 (* where an unsigned term originates, what node *)
-Definition origin_on : msg -> node -> Prop. Admitted.
-Definition origin_on_iff :
-forall t n, origin_on t n
-<-> exists I, (and (entry_point n I)
-                   (forall t', true = msg_in_set t' I -> subterm t t')).
-(* REF Definition 2.3.7 pg 6
+Inductive orig_at : msg -> node -> Prop :=
+| origat : forall m n, (exists I, (and (entry_point n I)
+                   (forall m', true = msg_in_set m' I -> subterm m m')))
+-> orig_at m n.
+(* [REF 1] Definition 2.3.7 pg 6
    "An unsigned term t originates on n in N iff n is an entry point for 
     the set I = {t' | t is a subterm of t'}."*)
 
 (* uniquely originating term def, useful for nonces or session keys *)
-Definition uniq_origin : msg -> Prop. Admitted.
-Definition uniq_origin_iff :
-forall t, uniq_origin t 
-          <-> exists n, forall n', origin_on t n' -> n = n'.
-(* REF Definition 2.3.8 pg 7 
+Inductive uniq_orig : msg -> Prop :=
+| uniqorg forall t, exists n, (forall n', origin_on t n' -> n = n') 
+                              -> uniq_orig t .
+(* [REF 1] Definition 2.3.8 pg 7 
    "unsigned term t is uniquely originating iff t originates on a unique
     n in N." *)
 
