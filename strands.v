@@ -19,44 +19,60 @@
 
 Require Import List ListSet Arith Omega.
 
+(* Represent atomic messages, *)
+Inductive text : Type :=
+ | txt : text.
+Hint Constructors text.
+
+(* representing kryptographic key *)
+Inductive key : Type :=
+ | crypto : key.
+Hint Constructors key.
+
+(* TODO - injective, unary operation (inv : key -> key)
+          Or in Coq would this make more sense
+          instead as  key -> key -> Prop?
+          The text notes the ability to handle
+          both symmetric and asymmetric keys... *)
+
+(* TODO? For the analysis of the NSL protocol, they 
+   include an extension of term/message definitions
+   that includes names and public keys which are
+   associated with a specific name.*)
+
 (* message or term *)
 Inductive msg : Type :=
-| mterm : msg
-| mcons : msg -> msg -> msg (* added for convenience, looking for 'strict' justification... *)
-| mcrypt : msg (* key *) -> msg -> msg. (* TODO is encryption best represented this way? *)
-(* [REF 1] Section 2.1 pg 5 *)
+| mtext : text -> msg
+| mcons : msg -> msg -> msg 
+| mcrypt : key -> msg -> msg.
+(* [REF 1] Section 2.1 pg 5 
+           Section 2.3 pg 9 *)
 (* [REF 2] pg 4 paragraph 3 (detains of encryption and subterms) *)
-(* TODO: Seems there is more structure to a message
-         which will be added later (e.g. messages
-         being composed of numerous sub pieces) *)
-
 Hint Constructors msg.
+
 
 Definition msg_eq_dec : forall x y : msg,  
   {x = y} + {x <> y}.
 Proof.
- intros. decide equality. 
-Qed. 
+ Admitted.
+
 
 Definition msg_in_set (m:msg) (s:set msg) : bool := 
   set_mem msg_eq_dec m s.
 
 
 (* subterm relationship for messages *)
-(* sub term -> larger encapsulating term -> Prop *)
+(* subterm -> larger encapsulating term -> Prop *)
 Inductive subterm : msg -> msg -> Prop :=
 | strefl : forall m, subterm m m
 (* | stcryp : forall a g, subterm a g -> subterm a encrpt(g)  *)
-| stcomp_l : forall st l r, 
+| stcons_l : forall st l r, 
                subterm st l -> subterm st (mcons l r)
-| stcomp_r : forall st l r, 
+| stcons_r : forall st l r, 
                subterm st r -> subterm st (mcons l r)
-| stcrpyt : forall st t key, 
-              subterm st t -> subterm st (mcrypt key t).
-(* [REF 1] Definition 2.1 pg 6 and Definition 2.11 TODO Add more this was a jump ahead
-    TODO the definition there reference a (by that point) defined notion
-    of encryption - we'll have to come back and add this. 
-   *)
+| stcrpyt : forall st t k, 
+              subterm st t -> subterm st (mcrypt k t).
+(* [REF 1] Definition 2.1 pg 6 and Definition 2.11 *)
 Hint Constructors subterm.
 
 (* signed message, + (tx) or - (rx) *)
@@ -84,8 +100,8 @@ Definition strand : Type := list smsg.
 Definition strand_eq_dec : forall x y : strand,  
   {x = y} + {x <> y}.
 Proof.
- intros. decide equality. apply smsg_eq_dec. 
-Qed. 
+ intros. decide equality. Admitted. (* apply smsg_eq_dec.
+Qed. *)
 
 Definition strand_in_set (s:strand) (ss:set strand) : bool := 
   set_mem strand_eq_dec s ss.
@@ -136,38 +152,43 @@ Definition n_strand (n:node) : strand :=
 (* signed message of a node *)
 Fixpoint n_smsg (n:node) : smsg :=
   match n with
-    | exist npair p 
-      =>  nth (snd npair) (fst npair)  (tx mterm) (* TODO default term... ? *)
+    | exist (s, i) p 
+      =>  nth i s  (tx (mtext txt)) (* TODO default term... ? *)
+(*      =>  nth (snd npair) (fst npair)  (None)  TODO default term... ? *)
   end. 
 (* [REF 1] Definition 2.3.2 pg 6
    "Define term(n) to be the ith signed term of the trace of s." *)
 
 (* unsigned message of a node *)
 Fixpoint n_msg (n:node) : msg :=
-  match n with
-    | exist npair p 
-      => match  nth (snd npair) (fst npair)  (tx mterm) with  (* TODO default term... ? *)
-           | tx t => t
-           | rx t => t
-         end
+  match n_smsg n with
+    | tx t => t
+    | rx t => t
   end. 
 (* [REF 1] Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
+(* TODO proof n_msg never returns None *)
 
-SearchAbout eq.
 
-Definition node_eq (x y :node) :=
+Definition node_eq (x y :node) :
  ((n_smsg x) = (n_smsg y)) ->
       ((n_strand x) = (n_strand y)) -> x = y.
+Proof. 
+ intros. 
+ inversion x.
+Admitted.
+
+
+Definition node_neq (x y :node) :=
+ (or ((n_smsg x) <> (n_smsg y))
+      ((n_strand x) <> (n_strand y))) -> x <> y.
 
 Definition node_eq_dec : forall x y : node,
  {x = y} + {x <> y}.
 Proof.
- intros.  remember (node_eq x y).
- unfold node_eq in HeqP.
- rewrite HeqP. (* decide equality. Fails *)
+ intros. (* decide equality. Fails *)
 Admitted.  (* TODO Fix equality or definition of node. *)
 
 Definition node_in_set (n:node) (ns: set node) : bool :=
@@ -241,8 +262,9 @@ Inductive orig_at : msg -> node -> Prop :=
 
 (* uniquely originating term def, useful for nonces or session keys *)
 Inductive uniq_orig : msg -> Prop :=
-| uniqorg forall t, exists n, (forall n', origin_on t n' -> n = n') 
-                              -> uniq_orig t .
+| uniqorg : forall t, (exists n, 
+              (forall n', orig_at t n' -> n = n') )
+              -> uniq_orig t.
 (* [REF 1] Definition 2.3.8 pg 7 
    "unsigned term t is uniquely originating iff t originates on a unique
     n in N." *)
