@@ -17,18 +17,17 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import List ListSet Arith Omega.
+Require Import List ListSet Arith Omega ProofIrrelevanceFacts.
 
 (* Represent atomic messages, *)
-Inductive text : Type :=
- | txt : text.
-Hint Constructors text.
+Variable text : Set.
+Variable text_eq_dec : forall (x y:text), {x = y} + {x <> y}.
+Hint Resolve text_eq_dec.
 
 (* representing kryptographic key *)
-Inductive key : Type :=
- | crypto : key.
-Hint Constructors key.
-
+Variable key : Set.
+Variable key_eq_dec : forall (x y:key), {x = y} + {x <> y}.
+Hint Resolve key_eq_dec.
 (* TODO - injective, unary operation (inv : key -> key)
           Or in Coq would this make more sense
           instead as  key -> key -> Prop?
@@ -54,8 +53,9 @@ Hint Constructors msg.
 Definition msg_eq_dec : forall x y : msg,  
   {x = y} + {x <> y}.
 Proof.
- Admitted.
-
+  decide equality.
+Qed.
+Hint Resolve msg_eq_dec.
 
 Definition msg_in_set (m:msg) (s:set msg) : bool := 
   set_mem msg_eq_dec m s.
@@ -87,9 +87,9 @@ Hint Constructors smsg.
 Definition smsg_eq_dec : forall x y : smsg,  
   {x = y} + {x <> y}.
 Proof.
- intros. decide equality; apply msg_eq_dec.
+ intros. decide equality.
 Qed. 
-
+Hint Resolve smsg_eq_dec.
 
 (* strand *)
 Definition strand : Type := list smsg.
@@ -97,11 +97,12 @@ Definition strand : Type := list smsg.
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
+
 Definition strand_eq_dec : forall x y : strand,  
   {x = y} + {x <> y}.
 Proof.
- intros. decide equality. Admitted. (* apply smsg_eq_dec.
-Qed. *)
+ intros. decide equality.
+Qed.
 
 Definition strand_in_set (s:strand) (ss:set strand) : bool := 
   set_mem strand_eq_dec s ss.
@@ -150,14 +151,53 @@ Definition n_strand (n:node) : strand :=
    "If n = <s,i> then ... strand(n) = s. *)
 
 (* signed message of a node *)
-Fixpoint n_smsg (n:node) : smsg :=
+Fixpoint n_smsg_option (n:node) : (option smsg) :=
   match n with
     | exist (s, i) p 
-      =>  nth i s  (tx (mtext txt)) (* TODO default term... ? *)
-(*      =>  nth (snd npair) (fst npair)  (None)  TODO default term... ? *)
+      =>  nth_error s i
   end. 
 (* [REF 1] Definition 2.3.2 pg 6
    "Define term(n) to be the ith signed term of the trace of s." *)
+
+Lemma nth_error_len : forall {X:Type} {l:list X} i,
+None = nth_error l i -> (length l) <= i.
+Proof.
+  intros X l i. generalize dependent l.
+  induction i. 
+
+  intros l H.
+  unfold nth_error in H.
+  unfold error in H.
+  destruct l.
+  auto. inversion H.
+
+  intros l' H.
+  destruct l'.
+  simpl; omega.
+  inversion H.
+  apply IHi in H1.
+  simpl. omega. 
+Qed.
+
+Theorem n_smsg_valid : forall (n:node),
+exists (m:smsg), Some m = (n_smsg_option n).
+Proof.
+  intros n.
+  remember (n_smsg_option n) as funcall.
+  destruct n. destruct funcall.  
+  exists s. reflexivity.
+
+  unfold n_smsg_option in Heqfuncall.
+  destruct x. simpl in l.
+  apply nth_error_len in Heqfuncall.
+  omega.
+Qed.
+
+
+Definition n_smsg (n:node) : smsg :=
+ match n_smsg_valid n with
+     | ex_intro m c => m
+ end.
 
 (* unsigned message of a node *)
 Fixpoint n_msg (n:node) : msg :=
