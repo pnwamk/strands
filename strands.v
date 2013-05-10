@@ -17,7 +17,7 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import List ListSet Arith Omega ProofIrrelevance.
+Require Import List ListSet Arith Peano_dec Omega ProofIrrelevance.
 
 (* Represent atomic messages, *)
 Variable text : Set.
@@ -211,21 +211,20 @@ Fixpoint n_msg (n:node) : msg :=
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
-(* TODO proof n_msg never returns None *)
-
-Hint Resolve proof_irrelevance.
-
 Definition node_eq_dec : forall x y : node,
  {x = y} + {x <> y}.
 Proof.
- intros.
-(* decide equality. Fails *)
-Admitted.  (* TODO Fix equality or definition of node. *)
+  intros [[xs xn] xp] [[ys yn] yp].
+  destruct (strand_eq_dec xs ys) as [EQs | NEQs]; subst.
+  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
+  left. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
+
+  right. intros C. inversion C. auto.
+  right. intros C. inversion C. auto.
+Qed.
 
 Definition node_in_set (n:node) (ns: set node) : bool :=
   set_mem node_eq_dec n ns.
-
-
 
 (* To reason about the set of nodes in a strand space *)
 Definition node_in_ss (n:node) (ss:sspace) : bool := 
