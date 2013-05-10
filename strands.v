@@ -17,7 +17,7 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import List ListSet Arith Omega ProofIrrelevanceFacts.
+Require Import List ListSet Arith Omega ProofIrrelevance.
 
 (* Represent atomic messages, *)
 Variable text : Set.
@@ -103,6 +103,7 @@ Definition strand_eq_dec : forall x y : strand,
 Proof.
  intros. decide equality.
 Qed.
+Hint Resolve strand_eq_dec.
 
 Definition strand_in_set (s:strand) (ss:set strand) : bool := 
   set_mem strand_eq_dec s ss.
@@ -180,7 +181,8 @@ Proof.
 Qed.
 
 Theorem n_smsg_valid : forall (n:node),
-exists (m:smsg), Some m = (n_smsg_option n).
+{m:smsg | Some m = n_smsg_option n}.
+(* exists (m:smsg), Some m = (n_smsg_option n). *)
 Proof.
   intros n.
   remember (n_smsg_option n) as funcall.
@@ -196,7 +198,7 @@ Qed.
 
 Definition n_smsg (n:node) : smsg :=
  match n_smsg_valid n with
-     | ex_intro m c => m
+     | exist m _ => m
  end.
 
 (* unsigned message of a node *)
@@ -211,24 +213,13 @@ Fixpoint n_msg (n:node) : msg :=
 
 (* TODO proof n_msg never returns None *)
 
-
-Definition node_eq (x y :node) :
- ((n_smsg x) = (n_smsg y)) ->
-      ((n_strand x) = (n_strand y)) -> x = y.
-Proof. 
- intros. 
- inversion x.
-Admitted.
-
-
-Definition node_neq (x y :node) :=
- (or ((n_smsg x) <> (n_smsg y))
-      ((n_strand x) <> (n_strand y))) -> x <> y.
+Hint Resolve proof_irrelevance.
 
 Definition node_eq_dec : forall x y : node,
  {x = y} + {x <> y}.
 Proof.
- intros. (* decide equality. Fails *)
+ intros.
+(* decide equality. Fails *)
 Admitted.  (* TODO Fix equality or definition of node. *)
 
 Definition node_in_set (n:node) (ns: set node) : bool :=
