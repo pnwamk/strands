@@ -17,17 +17,13 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import List ListSet Arith Peano_dec Omega ProofIrrelevance.
+Require Import List Arith Peano_dec Omega Ensembles.
 
 (* Represent atomic messages, *)
 Variable text : Set.
-Variable text_eq_dec : forall (x y:text), {x = y} + {x <> y}.
-Hint Resolve text_eq_dec.
 
 (* representing kryptographic key *)
 Variable key : Set.
-Variable key_eq_dec : forall (x y:key), {x = y} + {x <> y}.
-Hint Resolve key_eq_dec.
 (* TODO - injective, unary operation (inv : key -> key)
           Or in Coq would this make more sense
           instead as  key -> key -> Prop?
@@ -48,18 +44,6 @@ Inductive msg : Type :=
            Section 2.3 pg 9 *)
 (* [REF 2] pg 4 paragraph 3 (detains of encryption and subterms) *)
 Hint Constructors msg.
-
-
-Definition msg_eq_dec : forall x y : msg,  
-  {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Qed.
-Hint Resolve msg_eq_dec.
-
-Definition msg_in_set (m:msg) (s:set msg) : bool := 
-  set_mem msg_eq_dec m s.
-
 
 (* subterm relationship for messages *)
 (* subterm -> larger encapsulating term -> Prop *)
@@ -84,42 +68,28 @@ Inductive smsg : Type :=
    and the second a signed message. *)
 Hint Constructors smsg.
 
-Definition smsg_eq_dec : forall x y : smsg,  
-  {x = y} + {x <> y}.
-Proof.
- intros. decide equality.
-Qed. 
-Hint Resolve smsg_eq_dec.
-
 (* strand *)
 Definition strand : Type := list smsg.
 (* [REF 1] First sentence of Abstract: "sequence of events"  
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
-
-Definition strand_eq_dec : forall x y : strand,  
-  {x = y} + {x <> y}.
-Proof.
- intros. decide equality.
-Qed.
-Hint Resolve strand_eq_dec.
-
+(*
 Definition strand_in_set (s:strand) (ss:set strand) : bool := 
-  set_mem strand_eq_dec s ss.
+  set_mem strand_eq_dec s ss. *)
 
 (* strand space *)
 Inductive sspace : Type :=
-| space : set msg -> set strand -> sspace.
-(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) is a set
-    E with a trace mapping tr : E -> list smsg *)
+| space : Ensemble msg -> Ensemble strand -> sspace.
+(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
+           is a set E with a trace mapping tr : E -> list smsg *)
 
-Definition ss_msgs (ss:sspace) : set msg :=
+Definition ss_msgs (ss:sspace) : Ensemble msg :=
  match ss with
   | space m_set s_set => m_set
  end.
 
-Definition ss_strands (ss:sspace) : set strand :=
+Definition ss_strands (ss:sspace) : Ensemble strand :=
  match ss with
   | space m_set s_set => s_set
  end.
@@ -195,7 +165,7 @@ Proof.
   omega.
 Qed.
 
-
+(* signed message of a node *)
 Definition n_smsg (n:node) : smsg :=
  match n_smsg_valid n with
      | exist m _ => m
@@ -211,30 +181,15 @@ Fixpoint n_msg (n:node) : msg :=
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
-Definition node_eq_dec : forall x y : node,
- {x = y} + {x <> y}.
-Proof.
-  intros [[xs xn] xp] [[ys yn] yp].
-  destruct (strand_eq_dec xs ys) as [EQs | NEQs]; subst.
-  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
-  left. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
-
-  right. intros C. inversion C. auto.
-  right. intros C. inversion C. auto.
-Qed.
-
-Definition node_in_set (n:node) (ns: set node) : bool :=
-  set_mem node_eq_dec n ns.
-
 (* To reason about the set of nodes in a strand space *)
-Definition node_in_ss (n:node) (ss:sspace) : bool := 
- strand_in_set (n_strand n) (ss_strands ss).
+Definition node_in_ss (n:node) (ss:sspace) : Prop := 
+ In strand (ss_strands ss) (n_strand n).
 (* [REF 1] Definition 2.3.1 pg 6
    The reference to the "set of nodes (N) in a given strand space." *)
 
 (* Set of all nodes in a strand space *)
-Definition nodeset (ss:sspace) : Type := {ns: set node | forall n, (true = node_in_ss n ss) 
-                                                                   <-> true = node_in_set n ns}.
+Definition nodeset (ss:sspace) : Type := 
+{ns: Ensemble node | forall n, (node_in_ss n ss)  <-> In node ns n}.
 (* [REF 1] Definition 2.3.1 pg 6
    The set of nodes (in a strand space) is denoted by N. *)
 
@@ -270,12 +225,12 @@ Inductive occurs_in : msg -> node -> Prop :=
    "An unsigned term m occurs in a node n iff m is a subterm of term(n). " *)
 
 (* signifies the origin of a msg. *)
-Inductive entry_point : node -> set msg -> Prop :=
+Inductive entry_point : node -> Ensemble msg -> Prop :=
  | entrypoint :  forall n I, 
     (and (exists m, (and ((n_smsg n) = (tx m)) 
-                         (true = msg_in_set m I)))
+                         (In msg I m)))
          (forall n', (predX_E n' n) 
-                     -> (false = msg_in_set (n_msg n') I)))
+                     -> ~(In msg I (n_msg n'))))
     -> entry_point n I.
 (* [REF 1] Definition 2.3.6 pg 6
    "The node n in N is an entry point for I (a set of unsigned terms) iff
@@ -283,9 +238,10 @@ Inductive entry_point : node -> set msg -> Prop :=
 
 (* where an unsigned term originates, what node *)
 Inductive orig_at : msg -> node -> Prop :=
-| origat : forall m n, (exists I, (and (entry_point n I)
-                   (forall m', true = msg_in_set m' I -> subterm m m')))
--> orig_at m n.
+| origat : forall m n, 
+             (exists I, (and (entry_point n I)
+                             (forall m', In msg I m -> subterm m m')))
+             -> orig_at m n.
 (* [REF 1] Definition 2.3.7 pg 6
    "An unsigned term t originates on n in N iff n is an entry point for 
     the set I = {t' | t is a subterm of t'}."*)
@@ -301,3 +257,4 @@ Inductive uniq_orig : msg -> Prop :=
 
 
 (* Definition bundle : *)
+(* [REF 1] Definition 2.4 pg 7 *)
