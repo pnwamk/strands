@@ -301,9 +301,7 @@ Definition EdgesWitness N2 P :=
 (* *)
 Inductive Bundle : Nodes -> Edges -> Edges -> Prop :=
 | ssbundle : forall (N:Nodes) (CE PE:Edges),
-               Finite Node N -> 
-               Finite Edge CE -> 
-               Finite Edge PE ->
+               Finite Node N ->
                ValidEdges N CE ->
                ValidEdges N PE ->
                EdgesWitness CE CommEdge ->
