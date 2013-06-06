@@ -17,7 +17,7 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import Logic List Arith Peano_dec Omega Ensembles Finite_sets_facts Finite_sets Relation_Definitions ProofIrrelevance.
+Require Import Logic List Arith Peano_dec Omega Ensembles Finite_sets_facts Finite_sets Relation_Definitions ProofIrrelevance RelationClasses.
 
 (* Represent atomic messages, *)
 Variable Text : Set.
@@ -625,37 +625,27 @@ Qed.
 
 Lemma min_mem_add : forall N E N' N'' x,
 N'' = Add Node N' x ->
-In Node N x ->
+Included Node N'' N ->
 has_minimal_member N E N' ->
 has_minimal_member N E N''.
 Proof.
   intros N E N' N'' x Hadd HIn Hmin.
   inversion Hmin; subst.
-  constructor. exact H.
-  inversion Hmin; subst.
+  constructor. exact H. exact HIn.
+  inversion H1 as [minN' HnopredN'].
 
+  (* x is the added node. We know minN' is the min for N' (assuming defs are correct, few
+   more implications than I'd like, feel like some should be assumptions at this point... 
+   we need to show x is added, thus x has an edge to other nodes, and if that node
+   is minN' then it is the new minimum, else if not minN' is still a min... 
+   just discovered Coq.Classes.RelationClasses -- may be of use...
+   just found "A relation is a partial order when it's reflexive, anti-symmetric, 
+   and transitive. In the Coq standard library it's called just "order" for short." in
+   Ben Pierce's book... well that's interesting, wonder if there's something of use
+   under just "order"... and I just found Coq.Sets.Partial_Order ---
+   okay Library Coq.Sets.Relations_1 has Order which is partial order...
 
-  Lemma Included_aready : forall X N N' x,
-        Included X N' N ->
-        In X N x ->
-        Included X (Add X N' x) N.
-  Proof.
-    (* This may hinge on these Sets not containing
-       duplicate members...? Will have to check. *)
-  
-  remember (incl_add Node N' N x H0).
-  auto.
-  apply (H0 ).
-  
-  inversion B as [a b Hvn Hve Hutx Hpmem Hacyc]; subst.
-  inversion Hvn; subst. destruct H.
-  destruct (H0 x). inversion Hve; subst.
-  destruct H3. destruct H4. destruct H2. destruct H2.
-  remember (H5 x x0 H2) as Hedge.
-  inversion Hmin; subst.
-  remember (H6 B (incl_remove_add x N N' Hinc)).
-  clear Hvn Hvn Hutx Hpmem Hacyc H H0 H3 H2 H1.  
-Admitted.
+*)
 
 
 
@@ -670,22 +660,6 @@ exists min,
 In Node N' min -> 
 forall x, In Node N' x -> ~(EdgePath x min).
 Proof.
-  intros n.
-  induction n; intros N CE PE N' B HSubset Hcard.
-  remember (bundle_min_member_single N CE PE N' Hcard) as SingleMin.
-  destruct SingleMin. apply e; auto. 
-  apply (IHn N CE PE N'); auto.
-
-  inversion Hcard.
-
-  
-
-  remember (IHc A HSubset).
-
-  inversion Hcard.
-  induction .
-  inversion HNotEmpty. 
-  eapply ex_intro.
-  intros HminIn n HnIn.
-  destruct N'.
-  intros contra.
+  (* Worked here, got stuck, decided to go back and prove for 1 and n -> (n+1)
+     when above theorems/lemmas are complete this should be a simple set of apply
+     statements. *)
