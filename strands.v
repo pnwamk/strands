@@ -17,8 +17,7 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import List Arith Peano_dec Omega Ensembles Finite_sets Relation_Definitions
-ProofIrrelevance.
+Require Import Logic List Arith Peano_dec Omega Ensembles Finite_sets_facts Finite_sets Relation_Definitions ProofIrrelevance.
 
 (* Represent atomic messages, *)
 Variable Text : Set.
@@ -294,6 +293,12 @@ Inductive PredPath : Node -> Node -> Prop :=
     the same strand." *)
 Hint Constructors PredPath.
 
+Inductive SSEdge : Node -> Node -> Prop :=
+| ss_c_edge : forall n m, CommEdge n m -> SSEdge n m 
+| ss_p_edge : forall n m, PredEdge n m -> SSEdge n m.
+Hint Constructors SSEdge.
+
+
 Theorem p_path_transitivity : forall i j k,
 PredPath i j -> PredPath j k -> PredPath i k.
  Proof.
@@ -351,21 +356,19 @@ Inductive InP (X:Type) : Ensemble (X*X) -> X -> Prop :=
             -> InP X E x.
 Hint Constructors InP.
 
-Inductive ValidNodes : Nodes -> Edges -> Prop :=
+Inductive ValidNodes : Nodes -> Edges-> Prop :=
 | vn : forall N E,
-         (forall x y, Finite Node N /\
-                      In Node N x /\
-                      In Node N y /\ 
-                      (CommEdge x y \/ PredPath x y) /\
-                      In Edge E (x,y)) ->
-         ValidNodes N E.
+         Finite Node N /\
+         (forall x, In Node N x /\
+                    InP Node E x ) ->
+                    ValidNodes N E.
 
 
 (*Ensures edges are finite, built from nodes in the node set
   and meet the given constraints (Comm or Pred) *)
 Inductive ValidEdges : (Node -> Node -> Prop) -> Nodes -> Edges -> Prop :=
 | ve : forall (P: Node -> Node -> Prop) N E,
-         (Finite Edge E) 
+         Finite Edge E 
          /\ (forall n, InP Node E n -> In Node N n)
          /\ (forall n m, In Edge E (n,m) -> (P n m)) ->
          ValidEdges P N E.
@@ -411,7 +414,6 @@ Inductive Acyclic_Nodes : Nodes -> Prop :=
                     (forall n, In Node N n -> 
                                 Acyclic_Node n) -> Acyclic_Nodes N.
 
-
 Theorem acyc_p_path_irreflexivity : forall n m,
 Acyclic_Node m ->
 PredPath n m -> n <> m.
@@ -419,7 +421,7 @@ Proof.
   intros n m Hacycm Hpath.
   induction Hpath.
   
-  apply p_edge_irreflexivity. assumption.
+  apply p_edge_irreflexivity. exact H.
 
   remember (p_path_path i j k H Hpath) as Hik.
   intros contra.
@@ -441,14 +443,35 @@ Proof.
   auto.
 Qed.
 
+Theorem acyc_e_path_irreflexivity : forall n m,
+Acyclic_Node m ->
+EdgePath n m -> n <> m.
+Proof.
+  intros n m Hacyc Hpath.
+  induction Hpath.
+  apply c_edge_irreflexivity. exact H.
+  apply acyc_p_path_irreflexivity. exact Hacyc. exact H.
+
+  destruct Hacyc as [z Hnpath].
+  intros contra. subst.
+  remember (path_comm_path z y z H Hpath).
+  contradiction.
+
+  destruct Hacyc as [z Hnpath].
+  intros contra. subst.
+  remember (path_pred_path z y z H Hpath).
+  contradiction.
+Qed.
+
+
 (* An rx implies the existance of a tx *)
-Definition TxExists (N:Nodes) (CE:Edges) :=
+Definition TxExists (N:Nodes) (E:Edges) :=
   (forall y m, Node_smsg y = rx m -> 
                In Node N y ->  
                (exists x, (In Node N x
                            /\ Node_smsg x = tx m
                            /\ CommEdge x y
-                           /\ In Edge CE (x,y)))).
+                           /\ In Edge E (x,y)))).
 
 (* A node can rx a msg from only one tx at a time *)
 Definition UniqTx (N:Nodes) :=
@@ -471,15 +494,16 @@ Definition PredIsMember (N:Nodes) :=
 Hint Unfold PredIsMember.
 
 (* budle definition *)
-Inductive Bundle : Nodes -> Edges -> Edges -> Prop :=
-| bundle : forall (N:Nodes) (CE PE:Edges),
-               ValidNodes N (Union Edge CE PE) ->
-               ValidEdges CommEdge N CE ->
-               ValidEdges PredEdge N PE ->
-               ExistsUniqTx N CE ->
+Inductive Bundle : Nodes -> Edges -> Prop :=
+| bundle : forall (N:Nodes) (E:Edges),
+               ValidNodes N E ->
+               ValidEdges SSEdge N E ->
+               (* ValidEdges CommEdge N CE ->
+               ValidEdges PredEdge N PE -> *)
+               ExistsUniqTx N E ->
                PredIsMember N ->
                Acyclic_Nodes N -> 
-               Bundle N CE PE.
+               Bundle N E.
 (* [REF 1] Definition 2.4 pg 7 
     1) The subgraph is finite
     2) If n2 is in Nodes and is a rx-ing message, then there
@@ -492,39 +516,39 @@ Hint Constructors Bundle Acyclic_Node Acyclic_Nodes EdgePathEq EdgePath ValidEdg
   PredEdge CommEdge UniqOrigin OriginateAt EntryPoint OccursIn.
 Hint Unfold PredIsMember ExistsUniqTx UniqTx TxExists Node reflexive antisymmetric transitive.
 
-Inductive NodeInBundle : Node -> Nodes -> Edges -> Edges -> Prop :=
-| node_in_bundle : forall n N CE PE,
-Bundle N CE PE -> In Node N n -> NodeInBundle n N CE PE.
+Inductive NodeInBundle : Node -> Nodes -> Edges -> Prop :=
+| node_in_bundle : forall n N E,
+Bundle N E -> In Node N n -> NodeInBundle n N E.
 
-Lemma bundle_edge_reflexivity : forall N CE PE,
-Bundle N CE PE -> reflexive Node EdgePathEq.
+Lemma bundle_edge_reflexivity : forall N E,
+Bundle N E -> reflexive Node EdgePathEq.
 Proof.
   auto.
 Qed.
 
-Lemma bundle_edge_antisymmetry : forall N CE PE,
-Bundle N CE PE -> antisymmetric Node EdgePathEq.
+Lemma bundle_edge_antisymmetry : forall N E,
+Bundle N E -> antisymmetric Node EdgePathEq.
   intros.
   unfold antisymmetric.
   intros x y Hxy Hyx.
   destruct Hxy. auto.
   destruct Hyx. auto.
   
-  destruct H as [N CE PE Hvn Hvce Hvpe Htx Hpred Hacyc].
+  destruct H as [N E Hvn Hvce Htx Hpred Hacyc].
   destruct Hacyc.
   remember (path_transitivity y x y H0 H1) as contra.
   remember (H y) as Hyacyc.
-  destruct Hvn. clear Hvce Hvpe Htx Hpred.
-  destruct (H2 x y). destruct H4. destruct H5. 
-  apply Hyacyc in H5.
-  assert False. destruct H5. apply H5. assumption.
-  inversion H7.
+  destruct Hvn. clear Hvce Htx Hpred. destruct H2.
+  destruct (H3 x). destruct (H3 y). 
+  apply Hyacyc in H6.
+  assert False. destruct H6. apply H6. assumption.
+  inversion H8.
 Qed.
 
-Lemma bundle_edge_transitivity : forall N CE PE,
-Bundle N CE PE -> transitive Node EdgePathEq.
+Lemma bundle_edge_transitivity : forall N E,
+Bundle N E -> transitive Node EdgePathEq.
 Proof.
-  intros N CE PE B x y z Hxy Hyz.
+  intros N E B x y z Hxy Hyz.
   destruct Hxy.
   assumption.
   destruct Hyz. constructor. assumption.
@@ -533,8 +557,8 @@ Proof.
 Qed.
 
 (* Lemma 2.7 [REF 1] : Partial ordering of Bundle via edges *)
-Theorem bundle_poset : forall N CE PE,
-Bundle N CE PE -> 
+Theorem bundle_poset : forall N E,
+Bundle N E -> 
 reflexive Node EdgePathEq 
 /\ antisymmetric Node EdgePathEq
 /\ transitive Node EdgePathEq.
@@ -542,12 +566,126 @@ Proof.
   intros.
   remember H as B.
   destruct H.
-  split. apply (bundle_edge_reflexivity N CE PE). assumption.
-  split. apply (bundle_edge_antisymmetry N CE PE). assumption.
-  apply (bundle_edge_transitivity N CE PE). assumption.
+  split. apply (bundle_edge_reflexivity N E). assumption.
+  split. apply (bundle_edge_antisymmetry N E). assumption.
+  apply (bundle_edge_transitivity N E). assumption.
 Qed.
 (* Lemma 2.7 Suppose C is a bundle. 
    Then EdgePathEq for Nodes in C is a partial order, i.e. a reflexive, antisymmetric, 
    transitive relation. Every non-empty subset of the nodes in 
    C has C -minimal members.
 *)
+
+Inductive has_minimal_member : Nodes -> Edges -> Nodes -> Prop :=
+| has_min_mem : forall N E N', 
+                  Bundle N E ->
+                   Included Node N' N ->
+                   (exists min,
+                      In Node N' min -> 
+                      forall n, In Node N' n -> ~(EdgePath n min))
+                  -> has_minimal_member N E N'.
+Hint Constructors has_minimal_member.
+
+SearchAbout Ensemble.
+
+Lemma bundle_min_member_single : forall N E N',
+Bundle N E ->
+Included Node N' N ->
+(exists x, N' =  Add Node (Empty_set Node) x)  ->
+has_minimal_member N E N'.
+Proof.
+  intros N E N' B HIn Hsingle.
+  inversion Hsingle; subst.
+  constructor. exact B. exact HIn.
+  exists x.
+  intros HInx y HIny.
+  assert (x = y) as Hs.
+  apply  (Add_inv Node (Empty_set Node) x y) in HIny.
+  inversion HIny. inversion H. exact H.
+  intro contra.
+  apply (acyc_e_path_irreflexivity y y).
+  destruct B as [N E Hvn Hve Hutx Hpmem Hacyc].
+  destruct Hacyc. auto. subst.
+  exact contra.
+  reflexivity.
+Qed.
+
+
+
+Lemma incl_remove_add : forall X x N N',
+Included X (Add X N' x) N ->
+Included X N' N.
+Proof.
+  unfold Included.
+  intros.
+  apply H. unfold Add.
+  apply Union_introl.
+  exact H0.
+Qed.
+
+Lemma min_mem_add : forall N E N' N'' x,
+N'' = Add Node N' x ->
+In Node N x ->
+has_minimal_member N E N' ->
+has_minimal_member N E N''.
+Proof.
+  intros N E N' N'' x Hadd HIn Hmin.
+  inversion Hmin; subst.
+  constructor. exact H.
+  inversion Hmin; subst.
+
+
+  Lemma Included_aready : forall X N N' x,
+        Included X N' N ->
+        In X N x ->
+        Included X (Add X N' x) N.
+  Proof.
+    (* This may hinge on these Sets not containing
+       duplicate members...? Will have to check. *)
+  
+  remember (incl_add Node N' N x H0).
+  auto.
+  apply (H0 ).
+  
+  inversion B as [a b Hvn Hve Hutx Hpmem Hacyc]; subst.
+  inversion Hvn; subst. destruct H.
+  destruct (H0 x). inversion Hve; subst.
+  destruct H3. destruct H4. destruct H2. destruct H2.
+  remember (H5 x x0 H2) as Hedge.
+  inversion Hmin; subst.
+  remember (H6 B (incl_remove_add x N N' Hinc)).
+  clear Hvn Hvn Hutx Hpmem Hacyc H H0 H3 H2 H1.  
+Admitted.
+
+
+
+
+
+(* Lemma 2.7 [REF 1] : Minimal node existance *)
+Theorem bundle_min_members : forall n N CE PE N',
+Bundle N CE PE ->
+Included Node N' N -> 
+cardinal Node N' (n + 1) ->
+exists min,
+In Node N' min -> 
+forall x, In Node N' x -> ~(EdgePath x min).
+Proof.
+  intros n.
+  induction n; intros N CE PE N' B HSubset Hcard.
+  remember (bundle_min_member_single N CE PE N' Hcard) as SingleMin.
+  destruct SingleMin. apply e; auto. 
+  apply (IHn N CE PE N'); auto.
+
+  inversion Hcard.
+
+  
+
+  remember (IHc A HSubset).
+
+  inversion Hcard.
+  induction .
+  inversion HNotEmpty. 
+  eapply ex_intro.
+  intros HminIn n HnIn.
+  destruct N'.
+  intros contra.
