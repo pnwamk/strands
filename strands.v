@@ -17,7 +17,7 @@
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
 
-Require Import Logic List Arith Peano_dec Omega Ensembles Finite_sets_facts Finite_sets Relation_Definitions ProofIrrelevance RelationClasses.
+Require Import Logic List Arith Peano_dec Omega Ensembles Finite_sets_facts Finite_sets Relation_Definitions ProofIrrelevance.
 
 (* Represent atomic messages, *)
 Variable Text : Set.
@@ -251,6 +251,7 @@ Proof.
   destruct H. destruct H as [Htx2 Hrx2].
   rewrite Htx2 in Hrx1. inversion Hrx1.
 Qed.
+Hint Resolve c_edge_asymmetry.
 
 (* predecessor edge *)
 (* node's direct predecessor -> node -> Prop *)
@@ -288,7 +289,7 @@ Hint Resolve p_edge_asymmetry.
 Inductive PredPath : Node -> Node -> Prop :=
 | p_path_step : forall i j, PredEdge i j -> PredPath i j
 | p_path_path : forall i j k, PredEdge i j -> PredPath j k -> PredPath i k.
-(* [REF 1] Definition 2.3.4 pg 6
+ (* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
 Hint Constructors PredPath.
@@ -297,6 +298,28 @@ Inductive SSEdge : Node -> Node -> Prop :=
 | ss_c_edge : forall n m, CommEdge n m -> SSEdge n m 
 | ss_p_edge : forall n m, PredEdge n m -> SSEdge n m.
 Hint Constructors SSEdge.
+
+Theorem ss_edge_irreflexivity : forall n m,
+SSEdge n m -> n <> m.
+Proof.
+  intros n m Hss.
+  inversion Hss; auto.
+Qed.
+Hint Resolve ss_edge_irreflexivity.
+
+Theorem ssedge_asymmetry : forall n m,
+SSEdge n m -> ~(SSEdge m n).
+Proof.
+  intros n m Hss Hcontra.
+  inversion Hss; subst. inversion Hcontra; subst.
+  apply (c_edge_asymmetry n m H) in H0. exact H0.
+  inversion H; subst. inversion H0; subst.
+  inversion H1. apply H5. symmetry. exact H2.
+  inversion Hcontra; subst. inversion H; subst.
+  inversion H0; subst. inversion H3. apply H5.
+  symmetry. exact H1.
+  apply (p_edge_asymmetry n m H). exact H0.
+Qed.
 
 
 Theorem p_path_transitivity : forall i j k,
@@ -375,14 +398,9 @@ Inductive ValidEdges : (Node -> Node -> Prop) -> Nodes -> Edges -> Prop :=
 
 (* transitive closure of edges. *)
 Inductive EdgePath : Node -> Node -> Prop :=
-| path_comm : forall x y, CommEdge x y -> EdgePath x y
-| path_pred : forall x y, PredPath x y -> EdgePath x y
-| path_comm_path : forall x y z, CommEdge x y -> 
-                                 EdgePath y z -> 
-                                 EdgePath x z
-| path_pred_path : forall x y z, PredPath x y -> 
-                                 EdgePath y z -> 
-                                 EdgePath x z.
+| e_path_edge : forall x y, SSEdge x y -> EdgePath x y
+| e_path_path : forall x y, PredPath x y -> EdgePath x y
+| e_path_trans : forall x y z, EdgePath x y -> EdgePath y z -> EdgePath x z.
 Hint Constructors EdgePath.
 
 Theorem path_transitivity : forall i j k,
@@ -390,13 +408,10 @@ EdgePath i j -> EdgePath j k -> EdgePath i k.
 Proof.
   intros i j k Hij Hjk.
   induction Hij.
-  apply (path_comm_path x y k H Hjk).
-  apply (path_pred_path x y k H Hjk).
-  apply IHHij in Hjk.
-  apply (path_comm_path x y k H Hjk).
-  apply IHHij in Hjk.
-  apply (path_pred_path x y k H Hjk).
-Qed.  
+  apply (e_path_trans x y k (e_path_edge x y H) Hjk).
+  apply (e_path_trans x y k (e_path_path x y H) Hjk).
+  apply IHHij1. apply (e_path_trans y z k Hij2 Hjk).
+Qed.
 
 (* transitive reflexiv closure of edges. *)
 Inductive EdgePathEq : Node -> Node -> Prop :=
@@ -407,7 +422,6 @@ Hint Constructors EdgePathEq.
 
 Inductive Acyclic_Node : Node -> Prop :=
 | acyc_node : forall n,  ~(EdgePath n n) -> Acyclic_Node n.
-
 
 Inductive Acyclic_Nodes : Nodes -> Prop :=
 | acyclic_nodes : forall N,  
@@ -426,9 +440,9 @@ Proof.
   remember (p_path_path i j k H Hpath) as Hik.
   intros contra.
   destruct Hacycm as [n Hnp].
-  apply Hnp. remember (path_pred i n Hik) as Hin.
+  apply Hnp. remember (e_path_trans i j n (e_path_edge i j (ss_p_edge i j H)) (e_path_path j n Hpath)).
   assert (EdgePath n n = EdgePath i n). subst. reflexivity.
-  rewrite H0. auto. 
+  rewrite H0. exact e.
 Qed.
 Hint Resolve acyc_p_path_irreflexivity.
 
@@ -449,17 +463,12 @@ EdgePath n m -> n <> m.
 Proof.
   intros n m Hacyc Hpath.
   induction Hpath.
-  apply c_edge_irreflexivity. exact H.
+  apply ss_edge_irreflexivity. exact H.
   apply acyc_p_path_irreflexivity. exact Hacyc. exact H.
 
   destruct Hacyc as [z Hnpath].
   intros contra. subst.
-  remember (path_comm_path z y z H Hpath).
-  contradiction.
-
-  destruct Hacyc as [z Hnpath].
-  intros contra. subst.
-  remember (path_pred_path z y z H Hpath).
+  remember (e_path_trans z y z Hpath1 Hpath2).
   contradiction.
 Qed.
 
@@ -576,15 +585,14 @@ Qed.
    C has C -minimal members.
 *)
 
-Inductive has_minimal_member : Nodes -> Edges -> Nodes -> Prop :=
-| has_min_mem : forall N E N', 
+Inductive subset_min_mem : Nodes -> Edges -> Nodes -> Node -> Prop :=
+| has_min_mem : forall N E N' min, 
                   Bundle N E ->
                    Included Node N' N ->
-                   (exists min,
                       In Node N' min -> 
-                      forall n, In Node N' n -> ~(EdgePath n min))
-                  -> has_minimal_member N E N'.
-Hint Constructors has_minimal_member.
+                      (forall n, In Node N' n -> ~(EdgePath n min))
+                  -> subset_min_mem N E N' min.
+Hint Constructors subset_min_mem.
 
 SearchAbout Ensemble.
 
@@ -592,13 +600,14 @@ Lemma bundle_min_member_single : forall N E N',
 Bundle N E ->
 Included Node N' N ->
 (exists x, N' =  Add Node (Empty_set Node) x)  ->
-has_minimal_member N E N'.
+(exists y, subset_min_mem N E N' y).
 Proof.
   intros N E N' B HIn Hsingle.
   inversion Hsingle; subst.
-  constructor. exact B. exact HIn.
   exists x.
-  intros HInx y HIny.
+  constructor. exact B. exact HIn.
+  apply Add_intro2.
+  intros y HIny.
   assert (x = y) as Hs.
   apply  (Add_inv Node (Empty_set Node) x y) in HIny.
   inversion HIny. inversion H. exact H.
@@ -609,8 +618,6 @@ Proof.
   exact contra.
   reflexivity.
 Qed.
-
-
 
 Lemma incl_remove_add : forall X x N N',
 Included X (Add X N' x) N ->
@@ -626,14 +633,13 @@ Qed.
 Lemma min_mem_add : forall N E N' N'' x,
 N'' = Add Node N' x ->
 Included Node N'' N ->
-has_minimal_member N E N' ->
-has_minimal_member N E N''.
+(exists minN', subset_min_mem N E N' minN') ->
+(exists minN'', subset_min_mem N E N'' minN'').
 Proof.
   intros N E N' N'' x Hadd HIn Hmin.
-  inversion Hmin; subst.
-  constructor. exact H. exact HIn.
-  inversion H1 as [minN' HnopredN'].
-
+  inversion Hmin as [minN' HsubN']; subst.
+  (* from here we must show minN' is still a min or x is *)
+  
   (* x is the added node. We know minN' is the min for N' (assuming defs are correct, few
    more implications than I'd like, feel like some should be assumptions at this point... 
    we need to show x is added, thus x has an edge to other nodes, and if that node
@@ -652,8 +658,8 @@ Proof.
 
 
 (* Lemma 2.7 [REF 1] : Minimal node existance *)
-Theorem bundle_min_members : forall n N CE PE N',
-Bundle N CE PE ->
+Theorem bundle_min_members : forall n N E N',
+Bundle N E ->
 Included Node N' N -> 
 cardinal Node N' (n + 1) ->
 exists min,
