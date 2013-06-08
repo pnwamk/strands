@@ -212,11 +212,12 @@ Qed.
 Hint Resolve node_eq_iff.
 
 
-Inductive CommEdge : Node -> Node -> Prop :=
-| c_edge :  forall n m, ((exists a, (Node_smsg n = tx a 
-                                    /\ Node_smsg m = rx a))
+Inductive CommEdge : Relation Node :=
+| cedge :  forall n m t, ((Node_smsg n = tx t 
+                                    /\ Node_smsg m = rx t)
                         /\ Node_strand n <> Node_strand m)
                         -> CommEdge n m.
+
 (* [REF 1] Definition 2.3.3 pg 6
    "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a ... 
    recording a potential causal link between those strands**"
@@ -229,8 +230,7 @@ Inductive CommEdge : Node -> Node -> Prop :=
   its own transmission by any reasonable measure. *)
 Hint Constructors CommEdge.
 
-
-Theorem c_edge_irreflexivity : forall n m,
+Theorem cedge_irreflexivity : forall n m,
 CommEdge n m -> n <> m.
 Proof.
   intros.
@@ -239,31 +239,35 @@ Proof.
   inversion contra as [contra_s contra_i].
   apply H0. auto.
 Qed.  
-Hint Resolve c_edge_irreflexivity.
+Hint Resolve cedge_irreflexivity.
 
-Theorem c_edge_asymmetry : forall n m,
-CommEdge n m -> ~(CommEdge m n).
+Theorem cedge_antisymmetry : 
+Antisymmetric Node CommEdge.
 Proof.
   intros n m Hcomm contra.
-  destruct Hcomm. destruct H as [H Hneq_s].
-  destruct H. destruct H as [Htx1 Hrx1].
-  destruct contra. destruct H as [H Hneq_s2].
-  destruct H. destruct H as [Htx2 Hrx2].
+  assert False.
+  inversion Hcomm; subst.
+  inversion contra; subst.
+  destruct H as [H Hneq_s].
+  destruct H as [Htx1 Hrx1].
+  destruct H0 as [H Hneq_s2].
+  destruct H as [Htx2 Hrx2].
   rewrite Htx2 in Hrx1. inversion Hrx1.
+  inversion H.
 Qed.
-Hint Resolve c_edge_asymmetry.
+Hint Resolve cedge_antisymmetry.
 
 (* predecessor edge *)
 (* node's direct predecessor -> node -> Prop *)
-Inductive PredEdge : Node -> Node -> Prop :=
-| p_edge : forall i j, Node_strand i = Node_strand j 
+Inductive PredEdge : Relation Node :=
+| pedge : forall i j, Node_strand i = Node_strand j 
                        -> (Node_index i) + 1 = Node_index j 
                        -> PredEdge i j.
 (* [REF 1] Definition 2.3.4 pg 6
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
-Theorem p_edge_irreflexivity : forall n m,
+Theorem pedge_irreflexivity : forall n m,
 PredEdge n m -> n <> m.
 Proof.
   intros.
@@ -273,65 +277,71 @@ Proof.
   rewrite <- H0 in contra_i. 
   destruct (Node_index i). omega.  omega. 
 Qed.  
-Hint Resolve p_edge_irreflexivity.
+Hint Resolve pedge_irreflexivity.
 
-Theorem p_edge_asymmetry : forall n m,
-PredEdge n m -> ~(PredEdge m n).
+Theorem pedge_antisymmetry :
+Antisymmetric Node PredEdge.
 Proof.
   intros n m Hpe1 Hpe2.
   destruct Hpe1. destruct Hpe2.
   rewrite <- H0 in H2. omega.
 Qed.
-Hint Resolve p_edge_asymmetry.
+Hint Resolve pedge_antisymmetry.
 
 (* predecessor multi edge (not nec. immediate predecessor) *)
 (* node's predecessor -> node -> Prop *)
-Inductive PredPath : Node -> Node -> Prop :=
-| p_path_step : forall i j, PredEdge i j -> PredPath i j
-| p_path_path : forall i j k, PredEdge i j -> PredPath j k -> PredPath i k.
+Inductive PredPath : Relation Node :=
+| ppath_step : forall i j, PredEdge i j -> PredPath i j
+| ppath_path : forall i j k, PredEdge i j -> PredPath j k -> PredPath i k.
  (* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
 Hint Constructors PredPath.
 
-Inductive SSEdge : Node -> Node -> Prop :=
-| ss_c_edge : forall n m, CommEdge n m -> SSEdge n m 
-| ss_p_edge : forall n m, PredEdge n m -> SSEdge n m.
+Inductive SSEdge : Relation Node :=
+| ss_cedge : forall n m, CommEdge n m -> SSEdge n m 
+| ss_pedge : forall n m, PredEdge n m -> SSEdge n m.
 Hint Constructors SSEdge.
 
-Theorem ss_edge_irreflexivity : forall n m,
+Theorem ssedge_irreflexivity : forall (n m: Node),
 SSEdge n m -> n <> m.
 Proof.
   intros n m Hss.
   inversion Hss; auto.
 Qed.
-Hint Resolve ss_edge_irreflexivity.
+Hint Resolve ssedge_irreflexivity.
 
-Theorem ssedge_asymmetry : forall n m,
-SSEdge n m -> ~(SSEdge m n).
+Theorem ssedge_antisymmetry :
+(Antisymmetric Node SSEdge).
 Proof.
   intros n m Hss Hcontra.
   inversion Hss; subst. inversion Hcontra; subst.
-  apply (c_edge_asymmetry n m H) in H0. exact H0.
+  apply (cedge_antisymmetry n m H) in H0. exact H0.
+  assert False.
   inversion H; subst. inversion H0; subst.
   inversion H1. apply H5. symmetry. exact H2.
+  inversion H1.
+  assert False.
   inversion Hcontra; subst. inversion H; subst.
   inversion H0; subst. inversion H3. apply H5.
   symmetry. exact H1.
-  apply (p_edge_asymmetry n m H). exact H0.
+  remember (pedge_antisymmetry n m H). apply e in H0.  
+  remember (pedge_irreflexivity n m H). 
+  contradiction. inversion H0.
 Qed.
 
 
-Theorem p_path_transitivity : forall i j k,
-PredPath i j -> PredPath j k -> PredPath i k.
+Theorem ppath_transitivity :
+Transitive Node PredPath.
  Proof.
+   unfold Transitive.
    intros i j k Hij Hjk.
    induction Hij.
-   apply (p_path_path i j k H Hjk).
+   apply (ppath_path i j k H Hjk).
    apply IHHij in Hjk.
-   apply (p_path_path i j k H Hjk).
+   apply (ppath_path i j k H Hjk).
 Qed.
-Hint Resolve p_path_transitivity.
+Hint Resolve ppath_transitivity.
 
 Inductive OccursIn : Msg -> Node -> Prop :=
 | occurs_in : forall m n, Subterm m (Node_msg n) -> OccursIn m n.
@@ -397,28 +407,28 @@ Inductive ValidEdges : (Node -> Node -> Prop) -> Nodes -> Edges -> Prop :=
          ValidEdges P N E.
 
 (* transitive closure of edges. *)
-Inductive EdgePath : Node -> Node -> Prop :=
-| e_path_edge : forall x y, SSEdge x y -> EdgePath x y
-| e_path_path : forall x y, PredPath x y -> EdgePath x y
-| e_path_trans : forall x y z, EdgePath x y -> EdgePath y z -> EdgePath x z.
+Inductive EdgePath : Relation Node :=
+| epath_edge : forall x y, SSEdge x y -> EdgePath x y
+| epath_path : forall x y, PredPath x y -> EdgePath x y
+| epath_trans : forall x y z, EdgePath x y -> EdgePath y z -> EdgePath x z.
 Hint Constructors EdgePath.
 
-Theorem path_transitivity : forall i j k,
-EdgePath i j -> EdgePath j k -> EdgePath i k.
+Theorem path_transitivity :
+Transitive Node EdgePath.
 Proof.
+  unfold Transitive.
   intros i j k Hij Hjk.
   induction Hij.
-  apply (e_path_trans x y k (e_path_edge x y H) Hjk).
-  apply (e_path_trans x y k (e_path_path x y H) Hjk).
-  apply IHHij1. apply (e_path_trans y z k Hij2 Hjk).
+  apply (epath_trans x y k (epath_edge x y H) Hjk).
+  apply (epath_trans x y k (epath_path x y H) Hjk).
+  apply IHHij1. apply (epath_trans y z k Hij2 Hjk).
 Qed.
 
 (* transitive reflexiv closure of edges. *)
-Inductive EdgePathEq : Node -> Node -> Prop :=
-| path_eq_refl : forall x, EdgePathEq x x
-| path_eq_path : forall x y, EdgePath x y -> EdgePathEq x y.
+Inductive EdgePathEq : Relation Node :=
+| patheq_refl : forall x, EdgePathEq x x
+| patheq_path : forall x y, EdgePath x y -> EdgePathEq x y.
 Hint Constructors EdgePathEq.
-
 
 Inductive Acyclic_Node : Node -> Prop :=
 | acyc_node : forall n,  ~(EdgePath n n) -> Acyclic_Node n.
@@ -428,47 +438,47 @@ Inductive Acyclic_Nodes : Nodes -> Prop :=
                     (forall n, In Node N n -> 
                                 Acyclic_Node n) -> Acyclic_Nodes N.
 
-Theorem acyc_p_path_irreflexivity : forall n m,
+Theorem acyc_ppath_irreflexivity : forall n m,
 Acyclic_Node m ->
 PredPath n m -> n <> m.
 Proof.
   intros n m Hacycm Hpath.
   induction Hpath.
   
-  apply p_edge_irreflexivity. exact H.
+  apply pedge_irreflexivity. exact H.
 
-  remember (p_path_path i j k H Hpath) as Hik.
+  remember (ppath_path i j k H Hpath) as Hik.
   intros contra.
   destruct Hacycm as [n Hnp].
-  apply Hnp. remember (e_path_trans i j n (e_path_edge i j (ss_p_edge i j H)) (e_path_path j n Hpath)).
+  apply Hnp. remember (epath_trans i j n (epath_edge i j (ss_pedge i j H)) (epath_path j n Hpath)).
   assert (EdgePath n n = EdgePath i n). subst. reflexivity.
   rewrite H0. exact e.
 Qed.
-Hint Resolve acyc_p_path_irreflexivity.
+Hint Resolve acyc_ppath_irreflexivity.
 
-Theorem acyc_p_path_asymmetry : forall n m,
+Theorem acyc_ppath_asymmetry : forall n m,
 Acyclic_Node n ->
 PredPath n m -> ~(PredPath m n).
 Proof.
   intros n m Hacycn Hpp contra.
   destruct Hacycn.
   apply H.
-  remember (p_path_transitivity n m n Hpp contra).
+  remember (ppath_transitivity n m n Hpp contra).
   auto.
 Qed.
 
-Theorem acyc_e_path_irreflexivity : forall n m,
+Theorem acyc_epath_irreflexivity : forall n m,
 Acyclic_Node m ->
 EdgePath n m -> n <> m.
 Proof.
   intros n m Hacyc Hpath.
   induction Hpath.
-  apply ss_edge_irreflexivity. exact H.
-  apply acyc_p_path_irreflexivity. exact Hacyc. exact H.
+  apply ssedge_irreflexivity. exact H.
+  apply acyc_ppath_irreflexivity. exact Hacyc. exact H.
 
   destruct Hacyc as [z Hnpath].
   intros contra. subst.
-  remember (e_path_trans z y z Hpath1 Hpath2).
+  remember (epath_trans z y z Hpath1 Hpath2).
   contradiction.
 Qed.
 
@@ -523,22 +533,23 @@ Inductive Bundle : Nodes -> Edges -> Prop :=
     4) The subgraph is acyclic *)
 Hint Constructors Bundle Acyclic_Node Acyclic_Nodes EdgePathEq EdgePath ValidEdges ValidNodes InP PredPath
   PredEdge CommEdge UniqOrigin OriginateAt EntryPoint OccursIn.
-Hint Unfold PredIsMember ExistsUniqTx UniqTx TxExists Node reflexive antisymmetric transitive.
+Hint Unfold PredIsMember ExistsUniqTx UniqTx TxExists Node Reflexive Antisymmetric Transitive.
 
 Inductive NodeInBundle : Node -> Nodes -> Edges -> Prop :=
 | node_in_bundle : forall n N E,
 Bundle N E -> In Node N n -> NodeInBundle n N E.
 
 Lemma bundle_edge_reflexivity : forall N E,
-Bundle N E -> reflexive Node EdgePathEq.
+Bundle N E -> Reflexive Node EdgePathEq.
 Proof.
   auto.
 Qed.
+Hint Resolve bundle_edge_reflexivity.
 
 Lemma bundle_edge_antisymmetry : forall N E,
-Bundle N E -> antisymmetric Node EdgePathEq.
+Bundle N E -> Antisymmetric Node EdgePathEq.
   intros.
-  unfold antisymmetric.
+  unfold Antisymmetric.
   intros x y Hxy Hyx.
   destruct Hxy. auto.
   destruct Hyx. auto.
@@ -553,31 +564,29 @@ Bundle N E -> antisymmetric Node EdgePathEq.
   assert False. destruct H6. apply H6. assumption.
   inversion H8.
 Qed.
+Hint Resolve bundle_edge_antisymmetry.
 
 Lemma bundle_edge_transitivity : forall N E,
-Bundle N E -> transitive Node EdgePathEq.
+Bundle N E -> Transitive Node EdgePathEq.
 Proof.
   intros N E B x y z Hxy Hyz.
   destruct Hxy.
   assumption.
   destruct Hyz. constructor. assumption.
   remember (path_transitivity x x0 y H H0) as path.
-  apply (path_eq_path x y path).
+  apply (patheq_path x y path).
 Qed.
+Hint Resolve bundle_edge_transitivity.
 
 (* Lemma 2.7 [REF 1] : Partial ordering of Bundle via edges *)
-Theorem bundle_poset : forall N E,
+Theorem bundle_is_poset : forall N E,
 Bundle N E -> 
-reflexive Node EdgePathEq 
-/\ antisymmetric Node EdgePathEq
-/\ transitive Node EdgePathEq.
+Order Node EdgePathEq.
 Proof.
-  intros.
-  remember H as B.
-  destruct H.
-  split. apply (bundle_edge_reflexivity N E). assumption.
-  split. apply (bundle_edge_antisymmetry N E). assumption.
+  constructor.
+  apply (bundle_edge_reflexivity N E). assumption.
   apply (bundle_edge_transitivity N E). assumption.
+  apply (bundle_edge_antisymmetry N E). assumption.
 Qed.
 (* Lemma 2.7 Suppose C is a bundle. 
    Then EdgePathEq for Nodes in C is a partial order, i.e. a reflexive, antisymmetric, 
@@ -612,7 +621,7 @@ Proof.
   apply  (Add_inv Node (Empty_set Node) x y) in HIny.
   inversion HIny. inversion H. exact H.
   intro contra.
-  apply (acyc_e_path_irreflexivity y y).
+  apply (acyc_epath_irreflexivity y y).
   destruct B as [N E Hvn Hve Hutx Hpmem Hacyc].
   destruct Hacyc. auto. subst.
   exact contra.
@@ -630,6 +639,37 @@ Proof.
   exact H0.
 Qed.
 
+Lemma node_edge_opt_dec : forall N E n m,
+Bundle N E ->
+In Node N n ->
+In Node N m ->
+(~(SSEdge n m) \/ SSEdge n m).
+Proof.
+  Admitted.
+  (* This seems trivially true, and may be useful for proving minimum members
+     (showing that for the inductive step where a node is added, either it is 
+      the new min (edge new->old_min) or the old min is still a min *)
+
+Lemma incl_add_in : forall X N' N x,
+Included X (Add X N' x) N ->
+In X N x.
+Proof.
+  Admitted.
+  (* Trivial lemma that I can't find a thm to immediately solve... using it to try and solve min_mem_add... *)
+
+Lemma incl_add_inc : forall X N' N x, 
+Included X (Add X N' x) N -> Included X N' N.
+Proof.
+  Admitted.
+  (* Trivial lemma that I can't find a thm to immediately solve... using it to try and solve min_mem_add... *)
+
+Lemma in_incl_in : forall X N' N x,
+In X N' x ->
+Included X N' N ->
+In X N x.
+Proof. Admitted.
+  (* Trivial lemma that I can't find a thm to immediately solve... using it to try and solve min_mem_add... *)
+
 Lemma min_mem_add : forall N E N' N'' x,
 N'' = Add Node N' x ->
 Included Node N'' N ->
@@ -638,6 +678,18 @@ Included Node N'' N ->
 Proof.
   intros N E N' N'' x Hadd HIn Hmin.
   inversion Hmin as [minN' HsubN']; subst.
+  inversion HsubN' as [t1 t2 t3 t4 B Hincl HInN' Hnopath]; subst.
+  remember (incl_add_inc Node N' N x HIn) as HN'inN.
+  remember (node_edge_opt_dec N E x minN' B 
+                              (incl_add_in Node N' N x HIn)
+                              (in_incl_in Node N' N minN' HInN' Hincl)) as edge_opts.
+  
+  inversion edge_opts.
+  exists minN'.
+  constructor; auto.
+  (* We know minN' is a min for N'. x as added to make N'', we wish to prove N'' has a min member.
+    so things considering at the moment - Well at the moment... trying to show minN' IW IN N'+x... *)
+
   (* from here we must show minN' is still a min or x is *)
   
   (* x is the added node. We know minN' is the min for N' (assuming defs are correct, few
