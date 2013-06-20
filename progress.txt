@@ -1,0 +1,46 @@
+
+* Strand Spaces: Proving Security Protocols Correct
+** Strand Space General Theorems
+***[DONE] Lemma 2.7a | partial order of edges in a bundle
+***[] Lemma 2.7b | non-empty subsets of bundle's nodes have edge-minimal members
+***[] Lemma 2.8 | minimal members are tx-ers
+***[] Lemma 2.9 | originating node for subterms
+***[] Proposition 2.12 | encrypted subterms
+** Penetrator Theorems
+***[] Proposition 3.3 | non-penetrator reys that are not broadcast are never subterms
+** NSL Protocol Theorems: Responders Guarantee
+***[] Proposition 5.2 | NSL bundle contains a specific initiator strand
+***[] Lemma 5.3 | where Nb originates in NSL
+***[] Lemma 5.4 | properties of n2 in NSL
+***[] Lemma 5.6 | details of n1 in NSL
+***[] Lemma 5.7 | strand with n1 and n2 is an initiator in C
+***[] Proposition 5.8 | at most one init strand of specific form in NSL space
+** NSL Protocol Theorems: Original Needham-Schroeder
+***[] Lemma 5.9 | shows weakness in original protocol
+** NSL Protocol Theorems: Responder's Nonce
+***[] Proposition 5.10 | secrecy of nonce Nb
+***[] Proposition 5.11 | there are no minimal members that are regular nodes
+***[] Lemma 5.12 | no minimal member of S is a penetrator node
+** NSL Protocol Theorems: Secrecy and Agreement
+***[] Proposition 5.13 | secrecy of Na nonce
+***[] Proposition 5.14 | existance of responder strand with properties
+** Ideals and Honesty Theorems
+***[] Proposition 6.3 | 
+***[] Lemma 6.4 | 
+***[] Proposition 6.6 | 
+***[] Proposition 6.7 |
+***[] Proposition 6.8 |
+***[] Proposition 6.9 | 
+***[] Theorem 6.11 | 
+***[] Corollary 6.12 | 
+***[] Corollary 6.13 |
+** Otway-Reese Protocol Theorems
+***[] Lemma 7.2 | 
+***[] Theorem 7.4 |
+***[] Proposition 7.5 |
+***[] Proposition 7.6 |
+***[] Corollary 7.7 |
+***[] Theorem 7.8 |
+***[] Theorem 7.9 | 
+* Authentication Tests and the Structure of Bundles
+
