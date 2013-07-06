@@ -114,6 +114,13 @@ Definition Edge : Type := (prod Node Node).
 Definition Nodes := Ensemble Node.
 Definition Edges := Ensemble Edge.
 
+Definition Node' (N:Nodes) : Type := {n : Node | In Node N n}.
+
+Definition node' (N:Nodes) (n:Node' N) : Node :=
+ match n with 
+     | exist n _ => n
+ end.
+
 (* index of a node *)
 Definition Node_index (n:Node) : nat :=
   match n with
@@ -209,7 +216,7 @@ Hint Constructors CommEdge.
   close to the speed of light a strand cannot receive
   its own transmission by any reasonable measure. *)
 
-(* An CommEdge between nodes, where the set the nodes belong to is specified. *)
+(* A CommEdge between nodes, where the set the nodes belong to is specified. *)
 Inductive CommEdge' : Nodes -> Relation Node :=
 | cedge_n : forall N x y,
               In Node N x ->
@@ -217,6 +224,14 @@ Inductive CommEdge' : Nodes -> Relation Node :=
               CommEdge x y ->
               CommEdge' N x y.
 Hint Constructors CommEdge'.
+
+(* A CommEdge between Node's, where the set the nodes belong to is specified. 
+Inductive CommEdge'' (N:Nodes) : Relation (Node' N) :=
+| cedge_n' : forall N x y,
+              CommEdge (node' x) (node' y) ->
+              CommEdge'' N x y.
+Hint Constructors CommEdge''.
+*)
 
 Theorem cedge_irreflexivity : forall (x:Node),
 ~Reflexive Node CommEdge.
@@ -615,10 +630,27 @@ Inductive NodeInBundle : Node -> Nodes -> Edges -> Prop :=
 | node_in_bundle : forall n N E,
 Bundle N E -> In Node N n -> NodeInBundle n N E.
 
+Definition Set_Reflexive (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
+forall x, In X E x -> R x x. 
+
 Lemma bundle_edge_reflexivity : forall N E,
-Bundle N E -> Reflexive Node (EdgePathEq' N).
+Bundle N E ->
+Set_Reflexive Node N (EdgePathEq' N).
 Proof.
-  (* ************************ TODO ******************************* 
+  intros N E B x Hin. auto.
+Qed.
+
+  (*
+Lemma bundle_edge_reflexivity : forall N E x,
+In Node N x ->
+Bundle N E -> 
+Reflexive Node (EdgePathEq' N).
+Proof.
+  intros N E x HxIn B.
+  unfold Reflexive.
+  intros y.
+
+ ************************ TODO ******************************* 
      Reflexive is a forall x, but we wish to prove reflexivity 
      for the relation which is only on members of the Bundle.
      Q: "Why? Where did this come from?" - A: Previously a Bundle 
@@ -645,15 +677,46 @@ Proof.
 
 
     ********************** END OF TODO **************************
-    *)
+    
   intros N E B x.
   constructor.
   destruct B as [N E Hnodes Hedges Htx Hpred Hacyc].
   specialize rt_refl.
   auto.
 Qed.
-Hint Resolve bundle_edge_reflexivity.
+Hint Resolve bundle_edge_reflexivity.  *)
 
+Definition Set_Antisymmetric (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
+  forall x y, In X E x ->
+              In X E y -> 
+              R x y ->
+              R y x ->
+              x = y. 
+
+Lemma bundle_edge_antisymmetry : forall N E,
+Bundle N E ->
+Set_Antisymmetric Node N (EdgePathEq' N).
+Proof.
+  intros N E B x y Hinx Hiny Hxy Hyx.
+  destruct Hxy as [N x y Hinx2 Hiny2 Hxy].
+  apply epatheq_opts in Hxy.
+  destruct Hyx as [N y x Hinx3 Hiny3 Hyx].
+  apply epatheq_opts in Hyx.
+  destruct B as [N E Hvn Hvce Htx Hpred Hacyc].
+  destruct Hacyc as [N Hacycn]. remember (Hacycn x) as Hacycx.
+  destruct Hvn as [N E Hnodes]. destruct Hnodes as [Hfin Hin]. 
+  apply Hacycx in Hinx. inversion Hinx; subst.
+  destruct Hxy.
+    destruct Hyx.
+      remember (t_trans Node SSEdge x y x H0 H1) as loop.
+      contradiction.
+      symmetry. exact H1.
+    destruct Hyx.
+      subst. contradiction.
+      exact H0.
+Qed.
+Hint Resolve bundle_edge_antisymmetry.
+(*
 Lemma bundle_edge_antisymmetry : forall N E,
 Bundle N E -> Antisymmetric Node EdgePathEq.
 Proof.
@@ -677,7 +740,28 @@ Proof.
       exact H0.
 Qed.
 Hint Resolve bundle_edge_antisymmetry.
+*)
 
+Definition Set_Transitive (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
+  forall x y z, In X E x ->
+                In X E y -> 
+                In X E z ->
+                R x y ->
+                R y z ->
+                R x z. 
+
+Lemma bundle_edge_transitivity : forall N E,
+Bundle N E -> Set_Transitive Node N (EdgePathEq' N).
+Proof.
+  intros N E B x y z Hinx Hiny Hinz Hxy Hyz.
+  destruct Hxy as [N x y Hinx1 Hiny1 Hxy].
+  destruct Hyz as [N y z Hiny2 Hinz1 Hyz].
+  constructor. exact Hinx. exact Hinz.
+  apply (rt_trans Node SSEdge x y z Hxy Hyz).
+Qed.
+Hint Resolve bundle_edge_transitivity.
+
+(*
 Lemma bundle_edge_transitivity : forall N E,
 Bundle N E -> Transitive Node EdgePathEq.
 Proof.
@@ -685,6 +769,8 @@ Proof.
   apply (rt_trans Node SSEdge x y z Hxy Hyz).
 Qed.
 Hint Resolve bundle_edge_transitivity.
+*)
+
 
 (* Lemma 2.7 [REF 1] : Partial ordering of Bundle via edges *)
 Theorem bundle_is_poset : forall N E,
