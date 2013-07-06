@@ -23,6 +23,8 @@ Require Import Relation_Operators.
 
 (* Represent atomic messages, *)
 Variable Text : Set.
+Variable text_eq_dec : forall (x y:Text), {x = y} + {x <> y}.
+Hint Resolve text_eq_dec.
 
 (* representing kryptographic key *)
 Variable Key : Set.
@@ -31,6 +33,9 @@ Variable Key : Set.
           instead as  key -> key -> Prop?
           The text notes the ability to handle
           both symmetric and asymmetric keys... *)
+Variable key_eq_dec : forall (x y:Key), {x = y} + {x <> y}.
+Hint Resolve key_eq_dec.
+
 
 (* TODO? For the analysis of the NSL protocol, they 
    include an extension of term/message definitions
@@ -46,6 +51,14 @@ Inductive Msg : Type :=
            Section 2.3 pg 9 *)
 (* [REF 2] pg 4 paragraph 3 (detains of encryption and subterms) *)
 Hint Constructors Msg.
+
+Definition msg_eq_dec : forall x y : Msg,  
+  {x = y} + {x <> y}.
+Proof.
+  decide equality.
+Qed.
+Hint Resolve msg_eq_dec.
+
 
 (* subterm relationship for messages *)
 (* subterm -> larger encapsulating term -> Prop *)
@@ -70,15 +83,25 @@ Inductive SMsg : Type :=
    and the second a signed message. *)
 Hint Constructors SMsg.
 
+Definition smsg_eq_dec : forall x y : SMsg,  
+  {x = y} + {x <> y}.
+Proof.
+ intros. decide equality.
+Qed. 
+Hint Resolve smsg_eq_dec.
+
 (* strand *)
 Definition Strand : Type := list SMsg.
 (* [REF 1] First sentence of Abstract: "sequence of events"  
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
-(*
-Definition strand_in_set (s:strand) (ss:set strand) : bool := 
-  set_mem strand_eq_dec s ss. *)
+Definition strand_eq_dec : forall x y : Strand,  
+  {x = y} + {x <> y}.
+Proof.
+ intros. decide equality.
+Qed.
+Hint Resolve strand_eq_dec.
 
 Definition Strands := Ensemble Strand.
 Definition Msgs := Ensemble Msg.
@@ -191,6 +214,38 @@ Fixpoint Node_msg (n:Node) : Msg :=
 (* [REF 1] Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
+
+Definition node_eq_dec : forall x y : Node,
+ {x = y} + {x <> y}.
+Proof.
+  intros [[xs xn] xp] [[ys yn] yp].
+  destruct (strand_eq_dec xs ys) as [EQs | NEQs]; subst.
+  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
+  left. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
+
+  right. intros C. inversion C. auto.
+  right. intros C. inversion C. auto.
+Qed.
+
+
+Lemma node_imp_strand_nonempty : forall s n,
+Node_strand n = s ->
+length s > 0.
+Proof.
+  intros s n Hns.
+  destruct n. destruct x.
+  destruct n. simpl in l.
+  destruct s.
+  assert (s0 = nil). auto.
+  subst. inversion l.
+  simpl. omega.
+  simpl in l. 
+  assert (s0 = s). auto.
+  rewrite <- H.
+  omega.
+Qed.
+
+
 
 Inductive CommEdge : Relation Node :=
 | cedge :  forall n m t, ((Node_smsg n = tx t 
@@ -742,7 +797,7 @@ Proof.
   apply H. unfold Add.
   apply Union_introl.
   exact H0.
-Qed.
+Qed.  
 
 Theorem bundle_min_members : forall n N E N',
 Bundle N E ->
@@ -750,7 +805,7 @@ Included Node N' N ->
 cardinal Node N' (S n) ->
 exists min,
  In Node N' min ->
- forall x, In Node N' x -> ~(EdgePath x min).
+ (forall x, In Node N' x -> ~(EdgePath x min)).
 Proof.
   (* Worked here, got stuck, decided to go back and prove for 1 and n -> (n+1)
      when above theorems/lemmas are complete this should be a simple
@@ -777,13 +832,27 @@ set of apply
   cut (Included Node CA N). intros CI.
   edestruct IHn as [Imin IH].
    apply B. apply CI. apply Ccard.
+
+   destruct (node_eq_dec Imin Cx).
+
+   (* IF Imin <> Cx, it seems reasonable here to state Imin must be the minimum.
+      HOWEVER, if Imin == Cx *)
    exists Imin.
 
-  (* Worked on this a little, seems things to consider at this point are 
-     1) (eq? Cx Imin) and 2) I forget the second... basically at this point 
-      it looks like a b-line for the finish line with an apply IH, but you 
-      hit some details I started working through and then shifted gears 
-      to address the whole parameterized relations business (see * TODO * in 
-      the 'bundle_edge_reflexivity' Lemma) *)
+   intros IminInCA y yIn.
+   apply IH.
+   (* Here we're left to prove subgoals:
+        a) In Node CA Imin   AND
+        b) In Node CA y
 
+      (a) seems only possible if we assume Imin <> Cx (since Imin in N', and N' = CA + {Cx})
+      likewise... 
+      (b) seems only possible if we assume Imin <> Cx (since y in N', and N' = CA + {Cx})
+ 
+
+      -- backed up and intro'd the line "" ahead of the assertion that Imin is the min to see
+         if that leads to some insights into this whole eq/neq thing
+    *)
+
+   
 
