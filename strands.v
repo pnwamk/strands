@@ -114,13 +114,6 @@ Definition Edge : Type := (prod Node Node).
 Definition Nodes := Ensemble Node.
 Definition Edges := Ensemble Edge.
 
-Definition Node' (N:Nodes) : Type := {n : Node | In Node N n}.
-
-Definition node' (N:Nodes) (n:Node' N) : Node :=
- match n with 
-     | exist n _ => n
- end.
-
 (* index of a node *)
 Definition Node_index (n:Node) : nat :=
   match n with
@@ -626,10 +619,6 @@ Hint Constructors clos_trans clos_refl_trans.
 Hint Unfold PredIsMember ExistsUniqTx UniqTx TxExists EdgePath EdgePathEq. 
 Hint Unfold PredPath Node Reflexive Antisymmetric Transitive.
 
-Inductive NodeInBundle : Node -> Nodes -> Edges -> Prop :=
-| node_in_bundle : forall n N E,
-Bundle N E -> In Node N n -> NodeInBundle n N E.
-
 Definition Set_Reflexive (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
 forall x, In X E x -> R x x. 
 
@@ -640,51 +629,6 @@ Proof.
   intros N E B x Hin. auto.
 Qed.
 
-  (*
-Lemma bundle_edge_reflexivity : forall N E x,
-In Node N x ->
-Bundle N E -> 
-Reflexive Node (EdgePathEq' N).
-Proof.
-  intros N E x HxIn B.
-  unfold Reflexive.
-  intros y.
-
- ************************ TODO ******************************* 
-     Reflexive is a forall x, but we wish to prove reflexivity 
-     for the relation which is only on members of the Bundle.
-     Q: "Why? Where did this come from?" - A: Previously a Bundle 
-     absorbed nodes (i.e. it had a 'forall node, node in bundle' clause), 
-     this was because of an AND '/\' used instead of an implies in the 
-     ValidNodes assertion. It should have said node membership implied edge
-     existence, but instead it said 'ALL NODES ARE MEMBERS AND HAVE EDGES'
-     which is dumb. This would limit the ability to compare different bundles,
-     since they would contain eachother's nodes by default. Anyway, so I'm 
-     rewriting the relational definitions to have versions that only refer
-     to members of a specific set. This is all well and good... but now 
-     my universal relationship operations (Reflexive, Antisymmetric) are
-     far too broad. I don't want to state the relationship is Reflexive, I 
-     want to say in *that Set* it is reflexive. I'm flirting with defining 
-     a type that is basically a Node parameterized on a Set... ex:
-
-     Definition Node' (N:Nodes) : Type := {n : node | In Node N n}
-
-     and proving the partial order on that type. Node sure if that's the best
-     way, or if there's an issue I haven't yet forseen, but that at least is 
-     stabbing at what the *actual* assertion is (that the relation, which 
-     is inherently parameterized only one a specific bundle, gives a partial
-     order (or 'order' in Coq, same thing)).
-
-
-    ********************** END OF TODO **************************
-    
-  intros N E B x.
-  constructor.
-  destruct B as [N E Hnodes Hedges Htx Hpred Hacyc].
-  specialize rt_refl.
-  auto.
-Qed.
-Hint Resolve bundle_edge_reflexivity.  *)
 
 Definition Set_Antisymmetric (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
   forall x y, In X E x ->
@@ -716,31 +660,6 @@ Proof.
       exact H0.
 Qed.
 Hint Resolve bundle_edge_antisymmetry.
-(*
-Lemma bundle_edge_antisymmetry : forall N E,
-Bundle N E -> Antisymmetric Node EdgePathEq.
-Proof.
-  intros.
-  unfold Antisymmetric.
-  intros x y Hxy Hyx.
-  apply epatheq_opts in Hxy.
-  apply epatheq_opts in Hyx.
-  destruct H as [N E Hvn Hvce Htx Hpred Hacyc].
-  destruct Hacyc as [N Hacycn]. remember (Hacycn x) as Hacycx.
-  destruct Hvn as [N E Hnodes]. destruct Hnodes as [Hfin Hin]. 
-  remember (Hin x) as Hinx. inversion Hinx as [HinxN HinxE].
-  apply Hacycx in HinxN. inversion HinxN; subst.
-  destruct Hxy.
-    destruct Hyx.
-      remember (t_trans Node SSEdge x y x H0 H1) as loop.
-      contradiction.
-      symmetry. exact H1.
-    destruct Hyx.
-      subst. contradiction.
-      exact H0.
-Qed.
-Hint Resolve bundle_edge_antisymmetry.
-*)
 
 Definition Set_Transitive (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
   forall x y z, In X E x ->
@@ -761,26 +680,20 @@ Proof.
 Qed.
 Hint Resolve bundle_edge_transitivity.
 
-(*
-Lemma bundle_edge_transitivity : forall N E,
-Bundle N E -> Transitive Node EdgePathEq.
-Proof.
-  intros N E B x y z Hxy Hyz.
-  apply (rt_trans Node SSEdge x y z Hxy Hyz).
-Qed.
-Hint Resolve bundle_edge_transitivity.
-*)
-
+Definition Set_Order (X:Type) (E:Ensemble X) (R:Relation X) : Prop :=
+Set_Reflexive X E R /\ 
+Set_Antisymmetric X E R /\
+Set_Transitive X E R.
 
 (* Lemma 2.7 [REF 1] : Partial ordering of Bundle via edges *)
 Theorem bundle_is_poset : forall N E,
 Bundle N E -> 
-Order Node EdgePathEq.
+Set_Order Node N (EdgePathEq' N).
 Proof.
-  constructor.
-  apply (bundle_edge_reflexivity N E). assumption.
-  apply (bundle_edge_transitivity N E). assumption.
-  apply (bundle_edge_antisymmetry N E). assumption.
+  intros N E B.
+  split. apply (bundle_edge_reflexivity N E). exact B.
+  split. apply (bundle_edge_antisymmetry N E). exact B.
+  apply (bundle_edge_transitivity N E). exact B.
 Qed.
 (* Lemma 2.7 Suppose C is a bundle. 
    Then EdgePathEq for Nodes in C is a partial order, i.e. a reflexive, antisymmetric, 
@@ -819,10 +732,6 @@ Proof.
   exact contra.
   reflexivity.
 Qed.
-
-Lemma path_minimal_mem : forall N E x, 
-Bundle N E ->
-exists min, In Node N x
 
 Lemma incl_remove_add : forall X x N N',
 Included X (Add X N' x) N ->
