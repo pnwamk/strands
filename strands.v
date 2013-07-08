@@ -804,8 +804,8 @@ Bundle N E ->
 Included Node N' N ->
 cardinal Node N' (S n) ->
 exists min,
- In Node N' min ->
- (forall x, In Node N' x -> ~(EdgePath x min)).
+ In Node N' min -> 
+(forall x, ~(EdgePath' N' x min)).
 Proof.
   (* Worked here, got stuck, decided to go back and prove for 1 and n -> (n+1)
      when above theorems/lemmas are complete this should be a simple
@@ -822,9 +822,10 @@ set of apply
    replace CA with (Empty_set Node). trivial.
    apply cardinal_invert in Ccard. auto.
   exists min.
-  intros INm n INn EP.
+  intros INm n EP.
   inversion_clear SSmm.
-  eapply H2. apply INn. apply EP.
+  eapply H2. inversion EP; subst. apply H3. 
+  destruct EP. exact H5. 
 
   intros N E N' B I C.
   apply cardinal_invert in C.
