@@ -21,6 +21,39 @@ Require Import Logic List Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
 Require Import Relation_Operators.
 
+
+
+Require String. Open Scope string_scope.
+
+Ltac move_to_top x :=
+  match reverse goal with
+  | H : _ |- _ => try move x after H
+  end.
+
+Tactic Notation "assert_eq" ident(x) constr(v) :=
+  let H := fresh in
+  assert (x = v) as H by reflexivity;
+  clear H.
+
+Tactic Notation "Case_aux" ident(x) constr(name) :=
+  first [
+    set (x := name); move_to_top x
+  | assert_eq x name; move_to_top x
+  | fail 1 "because we are working on a different case" ].
+
+Tactic Notation "Case" constr(name) := Case_aux Case name.
+Tactic Notation "SCase" constr(name) := Case_aux SCase name.
+Tactic Notation "SSCase" constr(name) := Case_aux SSCase name.
+Tactic Notation "SSSCase" constr(name) := Case_aux SSSCase name.
+Tactic Notation "SSSSCase" constr(name) := Case_aux SSSSCase name.
+Tactic Notation "SSSSSCase" constr(name) := Case_aux SSSSSCase name.
+Tactic Notation "SSSSSSCase" constr(name) := Case_aux SSSSSSCase name.
+Tactic Notation "SSSSSSSCase" constr(name) := Case_aux SSSSSSSCase name.
+
+
+
+
+
 (* Represent atomic messages, *)
 Variable Text : Set.
 Variable text_eq_dec : forall (x y:Text), {x = y} + {x <> y}.
@@ -126,7 +159,10 @@ Definition SS_strands (ss:StrandSpace) : Strands :=
 
 
 (* node in a strand space *)
-Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
+Inductive Node : Strand -> nat -> Type :=
+| node : forall s n, n < length s -> Node s n.
+
+(* Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.*)
 (* [REF 1] Definition 2.3.1 pg 6
    -"A node is a pair <s,i> where s is a strand and i a nat in [0, (length s))"
      NOTE: I changed it to be 0 based instead of 1 based sequences
@@ -227,6 +263,18 @@ Proof.
   right. intros C. inversion C. auto.
 Qed.
 
+Definition node_neq_dec : forall x y : Node,
+ {x <> y} + {x = y}.
+Proof.
+  intros [[xs xn] xp] [[ys yn] yp].
+  destruct (strand_eq_dec xs ys) as [EQs | NEQs]; subst.
+  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
+  right. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
+
+  left. intros C. inversion C. auto.
+  left. intros C. inversion C. auto.
+Qed.
+
 
 Lemma node_imp_strand_nonempty : forall s n,
 Node_strand n = s ->
@@ -244,8 +292,6 @@ Proof.
   rewrite <- H.
   omega.
 Qed.
-
-
 
 Inductive CommEdge : Relation Node :=
 | cedge :  forall n m t, ((Node_smsg n = tx t 
@@ -756,6 +802,132 @@ Qed.
    C has C -minimal members.
 *)
 
+(* TEST TEST TEST TEST TEST TEST TEST *)
+
+Inductive subset_minimal : Nodes -> Node -> Prop :=
+| subset_min : forall N min,
+                 In Node N min ->
+                 (forall n, n <> min -> 
+                            In Node N min ->
+                            ~(EdgePathEq n min)) ->
+                 subset_minimal N min.
+
+Theorem finite_set_mem_dec : forall X E e,
+(forall (x y:X), ({x = y} + {x <> y})) ->
+Finite X E -> 
+In X E e \/ ~(In X E e).
+Proof.
+  intros X E e dec_eq fin.
+  induction fin.
+
+  right. intros contra. inversion contra.
+
+  destruct (dec_eq e x).
+  
+  left. subst. apply Add_intro2.
+
+  inversion IHfin.
+    eapply Add_intro1 in H0. left. exact H0.
+    right. intro contra. apply Add_inv in contra. 
+    inversion contra. apply H0. exact H1. apply n. symmetry. exact H1. 
+Qed.
+
+Lemma pred_ex_Sn : forall n c,
+Node_index n = S c ->
+  exists y, 
+    Node_index y = c /\ 
+    Node_strand y = Node_strand n.
+Proof.
+  intros n c n_index.
+  inversion n.
+  remember (Node_strand n).
+  destruct (nth_error s c).
+
+  auto.
+
+
+Theorem node_smsg_valid : forall (n:Node),
+                            {m:SMsg | Some m = Node_smsg_option n}.
+(* exists (m:smsg), Some m = (n_smsg_option n). *)
+Proof.
+  intros n.
+  remember (Node_smsg_option n) as funcall.
+  destruct n. destruct funcall.  
+  exists s. reflexivity.
+
+  unfold Node_smsg_option in Heqfuncall.
+  destruct x. simpl in l.
+  apply nth_error_len in Heqfuncall.
+  omega.
+Qed.
+
+
+Lemma bundle_minimal_ex : forall N E N',
+Bundle N E ->
+Included Node N' N ->
+(exists x, In Node N' x) ->
+(exists min, subset_minimal N' min).
+Proof.
+  intros N E N' B I ExN'.
+  
+  inversion ExN'.
+  remember (Node_smsg x) as x_node.
+
+  induction x_node.
+    Case "tx".
+    remember (Node_strand x) as x_strand.
+    remember (Node_index x) as x_index.
+    destruct x_index.
+      SCase "index 0".
+        exists x.
+        constructor. exact H.
+        intros n Hneq Hin contraPath. clear I ExN'.
+        induction contraPath as [n x edge | |]. 
+        (* destruct contraPath as [ x edge n | n x | x ]. *)
+          SSCase "n -> x (step)".
+          inversion edge.
+            SSSCase "CommEdge".
+              destruct H0. destruct H0. destruct H0. 
+              rewrite <- Heqx_node in H2. inversion H2.
+            SSSCase "PredEdge".
+              inversion H0; subst. omega.
+            SSCase "reflexive".
+              apply Hneq. reflexivity.
+            SSCase "trans".
+              apply IHcontraPath2; auto.
+              intro Eqyz. subst. apply IHcontraPath1; auto.  
+      SCase "index S n".              
+        apply IHx_index.
+
+
+
+
+
+
+rewrite Eqyz in contraPath1. subst.
+              remember (rt_trans Node SSEdge x y z contraPath1 contraPath2).
+              destruct c. 
+            
+
+        inversion contraPath.
+
+
+        intro contraPath.
+        unfold subset_minimal.
+
+  case node.
+  induction node.
+    case tx.
+    induction n.
+      exists x.
+
+
+    auto.
+  induction x.
+
+
+(* TEST TEST TEST TEST TEST TEST TEST *)
+
 Inductive subset_min_mem : Nodes -> Edges -> Nodes -> Node -> Prop :=
 | has_min_mem : forall N E N' min, 
                   Bundle N E ->
@@ -799,13 +971,14 @@ Proof.
   exact H0.
 Qed.  
 
-Theorem bundle_min_members : forall n N E N',
+Theorem bundle_min_members : forall n x N E N',
 Bundle N E ->
 Included Node N' N ->
 cardinal Node N' (S n) ->
 exists min,
- In Node N' min -> 
-(forall x, ~(EdgePath' N' x min)).
+In Node N' min ->
+In Node N' x ->
+ ~(EdgePath' N' x min).
 Proof.
   (* Worked here, got stuck, decided to go back and prove for 1 and n -> (n+1)
      when above theorems/lemmas are complete this should be a simple
@@ -813,7 +986,7 @@ set of apply
      statements. *)
   induction n as [|n].
 
-  intros N E N' B I C.
+  intros x N E N' B I C.
   edestruct bundle_min_member_single as [min SSmm].
    apply B. apply I.
    apply cardinal_invert in C.
@@ -822,25 +995,38 @@ set of apply
    replace CA with (Empty_set Node). trivial.
    apply cardinal_invert in Ccard. auto.
   exists min.
-  intros INm n EP.
+  intros InN'min InN'x EP.
   inversion_clear SSmm.
   eapply H2. inversion EP; subst. apply H3. 
   destruct EP. exact H5. 
 
-  intros N E N' B I C.
+  intros x N E N' B I C.
   apply cardinal_invert in C.
   destruct C as [CA [Cx [Ceq [Cnin Ccard]]]].
   cut (Included Node CA N). intros CI.
-  edestruct IHn as [Imin IH].
-   apply B. apply CI. apply Ccard.
+  destruct (IHn x N E CA B CI Ccard) as [Imin IH].
 
-   destruct (node_eq_dec Imin Cx).
+   destruct (node_neq_dec Imin Cx).
 
    (* IF Imin <> Cx, it seems reasonable here to state Imin must be the minimum.
       HOWEVER, if Imin == Cx *)
    exists Imin.
 
-   intros IminInCA y yIn.
+   subst.
+   assert (In Node CA Imin) as IminInCA.
+     remember (Add_inv Node CA Cx Imin).
+     inversion IH.
+     apply o in IminInN'.
+     inversion IminInN'.
+       exact H.
+       assert False. apply n0. symmetry. exact H.
+       inversion H0.
+   apply (IH y) in IminInCA.
+     destruct yIn.
+     subst.
+     assert ((Cx = y) = False).
+     apply Add_inv.
+     SearchAbout Add.
    apply IH.
    (* Here we're left to prove subgoals:
         a) In Node CA Imin   AND
@@ -853,6 +1039,11 @@ set of apply
 
       -- backed up and intro'd the line "" ahead of the assertion that Imin is the min to see
          if that leads to some insights into this whole eq/neq thing
+
+Add_inv:
+  forall (U : Type) (A : Ensemble U) (x y : U),
+  In U (Add U A x) y -> In U A y \/ x = y
+
     *)
 
    
