@@ -159,10 +159,7 @@ Definition SS_strands (ss:StrandSpace) : Strands :=
 
 
 (* node in a strand space *)
-Inductive Node : Strand -> nat -> Type :=
-| node : forall s n, n < length s -> Node s n.
-
-(* Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.*)
+Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
 (* [REF 1] Definition 2.3.1 pg 6
    -"A node is a pair <s,i> where s is a strand and i a nat in [0, (length s))"
      NOTE: I changed it to be 0 based instead of 1 based sequences
