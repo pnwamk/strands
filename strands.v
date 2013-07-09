@@ -272,7 +272,6 @@ Proof.
   left. intros C. inversion C. auto.
 Qed.
 
-
 Lemma node_imp_strand_nonempty : forall s n,
 Node_strand n = s ->
 length s > 0.
@@ -837,27 +836,21 @@ Node_index n = S c ->
 Proof.
   intros n c n_index.
   inversion n.
-  remember (Node_strand n).
-  destruct (nth_error s c).
+  remember (Node_strand n) as s.
+  remember (pair s c).
+  assert ((snd p) < (length (fst p))) as node_proof.
+    rewrite Heqp. simpl. 
+    assert (Node_index n < length (Node_strand n)).
+      destruct n. simpl. exact l.
+    rewrite n_index in H0. rewrite <- Heqs in H0. omega.
+  remember (exist ((s , c) node_proof)) as tadah.
 
-  auto.
-
-
-Theorem node_smsg_valid : forall (n:Node),
-                            {m:SMsg | Some m = Node_smsg_option n}.
-(* exists (m:smsg), Some m = (n_smsg_option n). *)
-Proof.
-  intros n.
-  remember (Node_smsg_option n) as funcall.
-  destruct n. destruct funcall.  
-  exists s. reflexivity.
-
-  unfold Node_smsg_option in Heqfuncall.
-  destruct x. simpl in l.
-  apply nth_error_len in Heqfuncall.
-  omega.
+  (* This would help in the effort to backtrack to a minimal member.
+     It seems trivial to say "Hey look, this isn'y the first node on a 
+     strand, so lets grab the node before it" but I'm not sure how one
+     constructors a non-inductive datatype like the Nodes defined
+     in this Strand Space context.... amk 20130709 *)
 Qed.
-
 
 Lemma bundle_minimal_ex : forall N E N',
 Bundle N E ->
