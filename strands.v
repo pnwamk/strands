@@ -20,9 +20,6 @@
 Require Import Logic List Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
 Require Import Relation_Operators.
-
-
-
 Require String. Open Scope string_scope.
 
 Ltac move_to_top x :=
@@ -49,10 +46,6 @@ Tactic Notation "SSSSCase" constr(name) := Case_aux SSSSCase name.
 Tactic Notation "SSSSSCase" constr(name) := Case_aux SSSSSCase name.
 Tactic Notation "SSSSSSCase" constr(name) := Case_aux SSSSSSCase name.
 Tactic Notation "SSSSSSSCase" constr(name) := Case_aux SSSSSSSCase name.
-
-
-
-
 
 (* Represent atomic messages, *)
 Variable Text : Set.
@@ -830,26 +823,17 @@ Qed.
 
 Lemma pred_ex_Sn : forall n c,
 Node_index n = S c ->
-  exists y, 
-    Node_index y = c /\ 
-    Node_strand y = Node_strand n.
+ exists y,
+   Node_index y = c /\
+   Node_strand y = Node_strand n.
 Proof.
-  intros n c n_index.
-  inversion n.
-  remember (Node_strand n) as s.
-  remember (pair s c).
-  assert ((snd p) < (length (fst p))) as node_proof.
-    rewrite Heqp. simpl. 
-    assert (Node_index n < length (Node_strand n)).
-      destruct n. simpl. exact l.
-    rewrite n_index in H0. rewrite <- Heqs in H0. omega.
-  remember (exist ((s , c) node_proof)) as tadah.
-
-  (* This would help in the effort to backtrack to a minimal member.
-     It seems trivial to say "Hey look, this isn'y the first node on a 
-     strand, so lets grab the node before it" but I'm not sure how one
-     constructors a non-inductive datatype like the Nodes defined
-     in this Strand Space context.... amk 20130709 *)
+ intros n c n_index.
+ destruct n as [[ns nc] nP].
+ simpl in *. subst nc.
+ eexists (exist _ (ns,c) _).
+ simpl. auto.
+Grab Existential Variables.
+ simpl. omega.
 Qed.
 
 Lemma bundle_minimal_ex : forall N E N',
@@ -892,31 +876,7 @@ Proof.
 
 
 
-
-
-rewrite Eqyz in contraPath1. subst.
-              remember (rt_trans Node SSEdge x y z contraPath1 contraPath2).
-              destruct c. 
-            
-
-        inversion contraPath.
-
-
-        intro contraPath.
-        unfold subset_minimal.
-
-  case node.
-  induction node.
-    case tx.
-    induction n.
-      exists x.
-
-
-    auto.
-  induction x.
-
-
-(* TEST TEST TEST TEST TEST TEST TEST *)
+(* End of TEST TEST TEST TEST TEST TEST TEST *)
 
 Inductive subset_min_mem : Nodes -> Edges -> Nodes -> Node -> Prop :=
 | has_min_mem : forall N E N' min, 
