@@ -301,20 +301,12 @@ Hint Constructors CommEdge.
 
 (* A CommEdge between nodes, where the set the nodes belong to is specified. *)
 Inductive CommEdge' : Nodes -> Relation Node :=
-| cedge_n : forall N x y,
+| cedge' : forall N x y,
               In Node N x ->
               In Node N y ->
               CommEdge x y ->
               CommEdge' N x y.
 Hint Constructors CommEdge'.
-
-(* A CommEdge between Node's, where the set the nodes belong to is specified. 
-Inductive CommEdge'' (N:Nodes) : Relation (Node' N) :=
-| cedge_n' : forall N x y,
-              CommEdge (node' x) (node' y) ->
-              CommEdge'' N x y.
-Hint Constructors CommEdge''.
-*)
 
 Theorem cedge_irreflexivity : forall (x:Node),
 ~Reflexive Node CommEdge.
@@ -366,7 +358,7 @@ Inductive PredEdge : Relation Node :=
 
 (* An CommEdge between nodes, where the set the nodes belong to is specified. *)
 Inductive PredEdge' : Nodes -> Relation Node :=
-| pedge_n : forall N x y,
+| pedge' : forall N x y,
               In Node N x ->
               In Node N y ->
               PredEdge x y ->
@@ -412,7 +404,7 @@ clos_trans Node PredEdge.
 
 (* An CommEdge between nodes, where the set the nodes belong to is specified. *)
 Inductive PredPath' : Nodes -> Relation Node :=
-| ppath_n : forall N x y,
+| ppath' : forall N x y,
               In Node N x ->
               In Node N y ->
               PredPath x y ->
@@ -424,7 +416,7 @@ union Node CommEdge PredEdge.
 
 (* An CommEdge between nodes, where the set the nodes belong to is specified. *)
 Inductive SSEdge' : Nodes -> Relation Node :=
-| ssedge_n : forall N x y,
+| ssedge' : forall N x y,
               In Node N x ->
               In Node N y ->
               SSEdge x y ->
@@ -549,7 +541,7 @@ Definition EdgePath : Relation Node :=
 clos_trans Node SSEdge.
 
 Inductive EdgePath' : Nodes -> Relation Node :=
-| epath_n : forall N x y,
+| epath' : forall N x y,
               In Node N x ->
               In Node N y ->
               EdgePath x y ->
@@ -579,7 +571,7 @@ Definition EdgePathEq : Relation Node :=
 clos_refl_trans Node SSEdge.
 
 Inductive EdgePathEq' : Nodes -> Relation Node :=
-| epatheq_n : forall N x y,
+| epatheq' : forall N x y,
               In Node N x ->
               In Node N y ->
               EdgePathEq x y ->
@@ -609,24 +601,6 @@ Inductive Acyclic_Nodes : Nodes -> Prop :=
 | acyclic_nodes : forall N,  
                     (forall n, In Node N n -> 
                                 Acyclic_Node n) -> Acyclic_Nodes N.
-
-Theorem acyc_ppath_imp_neq : forall n m,
-Acyclic_Node m ->
-PredPath n m -> n <> m.
-Proof.
-  intros n m Hacycm Hpath.
-  induction Hpath.
-  
-  apply pedge_imp_neq. exact H.
-
-  remember (t_trans Node PredEdge x y z Hpath1 Hpath2) as Hxz.
-  intros contra.
-  destruct Hacycm as [n Hnp].
-  apply Hnp. remember (ppath_imp_epath x n Hxz).
-  assert (EdgePath n n = EdgePath x n). subst. reflexivity.
-  rewrite H. exact e.
-Qed.
-Hint Resolve acyc_ppath_imp_neq.
 
 Theorem acyc_ppath_asymmetry : forall n m,
 Acyclic_Node n ->
@@ -791,13 +765,11 @@ Qed.
    C has C -minimal members.
 *)
 
-(* TEST TEST TEST TEST TEST TEST TEST *)
-
 Inductive subset_minimal : Nodes -> Node -> Prop :=
 | subset_min : forall N min,
                  In Node N min ->
                  (forall n, n <> min -> 
-                            In Node N min ->
+                            In Node N n ->
                             ~(EdgePathEq n min)) ->
                  subset_minimal N min.
 
@@ -836,165 +808,55 @@ Grab Existential Variables.
  simpl. omega.
 Qed.
 
+Inductive ReversePathEq : Relation Node :=
+| rev_path : forall x y, EdgePathEq x y -> ReversePathEq y x.
+Hint Constructors ReversePathEq.
+
+Inductive ReversePathEq' : Nodes -> Relation Node :=
+| rev_path' : forall N x y,
+                In Node N x ->
+                In Node N y ->
+                ReversePathEq x y ->
+                ReversePathEq' N x y.
+Hint Constructors ReversePathEq'.
+
+Lemma finite_rev_path_end : forall N n,
+Finite Node N ->
+In Node N n ->
+Acyclic_Nodes N ->
+exists y, (ReversePathEq' N n y /\
+(forall z, ReversePathEq' N y z -> y = z)).
+Proof.
+  Admitted.
+  
 Lemma bundle_minimal_ex : forall N E N',
 Bundle N E ->
 Included Node N' N ->
 (exists x, In Node N' x) ->
 (exists min, subset_minimal N' min).
 Proof.
-  intros N E N' B I ExN'.
-  
-  inversion ExN'.
-  remember (Node_smsg x) as x_node.
-
-  induction x_node.
-    Case "tx".
-    remember (Node_strand x) as x_strand.
-    remember (Node_index x) as x_index.
-    destruct x_index.
-      SCase "index 0".
-        exists x.
-        constructor. exact H.
-        intros n Hneq Hin contraPath. clear I ExN'.
-        induction contraPath as [n x edge | |]. 
-        (* destruct contraPath as [ x edge n | n x | x ]. *)
-          SSCase "n -> x (step)".
-          inversion edge.
-            SSSCase "CommEdge".
-              destruct H0. destruct H0. destruct H0. 
-              rewrite <- Heqx_node in H2. inversion H2.
-            SSSCase "PredEdge".
-              inversion H0; subst. omega.
-            SSCase "reflexive".
-              apply Hneq. reflexivity.
-            SSCase "trans".
-              apply IHcontraPath2; auto.
-              intro Eqyz. subst. apply IHcontraPath1; auto.  
-      SCase "index S n".              
-        apply IHx_index.
-
-
-
-
-(* End of TEST TEST TEST TEST TEST TEST TEST *)
-
-Inductive subset_min_mem : Nodes -> Edges -> Nodes -> Node -> Prop :=
-| has_min_mem : forall N E N' min, 
-                  Bundle N E ->
-                   Included Node N' N ->
-                      In Node N' min -> 
-                      (forall n, In Node N' n -> ~(EdgePath n min))
-                  -> subset_min_mem N E N' min.
-Hint Constructors subset_min_mem.
-
-Lemma bundle_min_member_single : forall N E N',
-Bundle N E ->
-Included Node N' N ->
-(exists x, N' =  Add Node (Empty_set Node) x)  ->
-(exists y, subset_min_mem N E N' y).
-Proof.
-  intros N E N' B HIn Hsingle.
-  inversion Hsingle; subst.
-  exists x.
-  constructor. exact B. exact HIn.
-  apply Add_intro2.
-  intros y HIny.
-  assert (x = y) as Hs.
-  apply  (Add_inv Node (Empty_set Node) x y) in HIny.
-  inversion HIny. inversion H. exact H.
-  intro contra.
-  apply (acyc_epath_irreflexivity y y).
-  destruct B as [N E Hvn Hve Hutx Hpmem Hacyc].
-  destruct Hacyc. auto. subst.
-  exact contra.
-  reflexivity.
+  intros N E N' B I N'ex.
+  destruct N'ex as [x xInN'].
+  destruct B as [  N E HVN HVE HexTx HPredMem Hacyc].
+  destruct HVN as [N E [Hfin HInE]].
+  assert (Finite Node N') as HfinN'.
+    eapply Finite_downward_closed.
+    exact Hfin. exact I.
+  assert (Acyclic_Nodes N') as HacycN'.
+    constructor. intros n nInN'.
+    destruct Hacyc. apply H. auto.
+  destruct (finite_rev_path_end N' x HfinN' xInN' HacycN') as [y [Hrevxy Hend]].
+  exists y. 
+  constructor. clear xInN'.
+  destruct Hrevxy as [N' x y xInN' yInN' revpathxy].
+  exact yInN'.
+  intros z zneqy zInN' epatheqny.
+  apply zneqy. symmetry. apply (Hend z).
+  constructor. clear xInN'. destruct Hrevxy as [N' x y xInN' yInN' revpathxy].
+  exact yInN'. exact zInN'. constructor. exact epatheqny.
 Qed.
 
-Lemma incl_remove_add : forall X x N N',
-Included X (Add X N' x) N ->
-Included X N' N.
-Proof.
-  unfold Included.
-  intros.
-  apply H. unfold Add.
-  apply Union_introl.
-  exact H0.
-Qed.  
 
-Theorem bundle_min_members : forall n x N E N',
-Bundle N E ->
-Included Node N' N ->
-cardinal Node N' (S n) ->
-exists min,
-In Node N' min ->
-In Node N' x ->
- ~(EdgePath' N' x min).
-Proof.
-  (* Worked here, got stuck, decided to go back and prove for 1 and n -> (n+1)
-     when above theorems/lemmas are complete this should be a simple
-set of apply
-     statements. *)
-  induction n as [|n].
-
-  intros x N E N' B I C.
-  edestruct bundle_min_member_single as [min SSmm].
-   apply B. apply I.
-   apply cardinal_invert in C.
-   destruct C as [CA [Cx [Ceq [Cnin Ccard]]]].
-   exists Cx. rewrite Ceq.
-   replace CA with (Empty_set Node). trivial.
-   apply cardinal_invert in Ccard. auto.
-  exists min.
-  intros InN'min InN'x EP.
-  inversion_clear SSmm.
-  eapply H2. inversion EP; subst. apply H3. 
-  destruct EP. exact H5. 
-
-  intros x N E N' B I C.
-  apply cardinal_invert in C.
-  destruct C as [CA [Cx [Ceq [Cnin Ccard]]]].
-  cut (Included Node CA N). intros CI.
-  destruct (IHn x N E CA B CI Ccard) as [Imin IH].
-
-   destruct (node_neq_dec Imin Cx).
-
-   (* IF Imin <> Cx, it seems reasonable here to state Imin must be the minimum.
-      HOWEVER, if Imin == Cx *)
-   exists Imin.
-
-   subst.
-   assert (In Node CA Imin) as IminInCA.
-     remember (Add_inv Node CA Cx Imin).
-     inversion IH.
-     apply o in IminInN'.
-     inversion IminInN'.
-       exact H.
-       assert False. apply n0. symmetry. exact H.
-       inversion H0.
-   apply (IH y) in IminInCA.
-     destruct yIn.
-     subst.
-     assert ((Cx = y) = False).
-     apply Add_inv.
-     SearchAbout Add.
-   apply IH.
-   (* Here we're left to prove subgoals:
-        a) In Node CA Imin   AND
-        b) In Node CA y
-
-      (a) seems only possible if we assume Imin <> Cx (since Imin in N', and N' = CA + {Cx})
-      likewise... 
-      (b) seems only possible if we assume Imin <> Cx (since y in N', and N' = CA + {Cx})
- 
-
-      -- backed up and intro'd the line "" ahead of the assertion that Imin is the min to see
-         if that leads to some insights into this whole eq/neq thing
-
-Add_inv:
-  forall (U : Type) (A : Ensemble U) (x y : U),
-  In U (Add U A x) y -> In U A y \/ x = y
-
-    *)
 
    
 
