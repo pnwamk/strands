@@ -808,6 +808,123 @@ Grab Existential Variables.
  simpl. omega.
 Qed.
 
+Print SSEdge.
+
+SearchAbout Relation Ensemble.
+(*
+Theorem path_list_ex :
+ forall N root,
+  exists l,
+    (l = root :: _) /\
+    (l = pre ++ (x::y::post) ->
+     SSEdge x y).
+Proof.
+Admitted.
+*)
+Inductive RevEdgePathList (U:Type) (R:Relation U) : Ensemble U -> list U -> Prop :=
+| REPL_nil : 
+    forall A y,
+      (forall x, ~ R x y) ->
+      RevEdgePathList U R A (y::nil)
+| REPL_cons :
+    forall A x l y,
+      RevEdgePathList U R A (x::l) ->
+      R x y ->
+      RevEdgePathList U R A (y::x::l).
+
+Lemma repl_exists :
+ forall N,
+   Finite Node N -> 
+   Acyclic_Nodes N ->
+   forall n,
+     In Node N n ->
+     exists l,
+       RevEdgePathList Node SSEdge N (n::l).
+Proof.
+Admitted.
+
+Inductive Acyclic (U:Type) (R:Relation U) : Ensemble U -> Prop :=
+| Acyclic_p :
+    forall A n,
+      In U A n ->
+      ~ R n n ->
+      Acyclic U R A.
+
+Lemma RPath_ind :
+ forall (U:Type) (R:Relation U) (P:Ensemble U -> Prop)
+        (Pempty : P (Empty_set U))
+        (Pend : forall (A:Ensemble U) y,
+                  Finite U A ->
+                  ~ In U A y ->
+                  P A ->
+                  (forall x,
+                     In U A x ->
+                     ~ R x y) ->
+                  P (Add U A y))
+        (Pstep : forall (A:Ensemble U) x y,
+                  Finite U A -> 
+                  In U A x ->
+                  ~ In U A y ->
+                  R x y ->
+                  P A ->
+                  P (Add U A y)),
+        forall (A:Ensemble U),
+          Finite U A ->
+          Acyclic U (clos_trans U R) A ->
+          P A.
+Proof.
+Admitted.
+
+Inductive IsReversePath : Nodes -> list Node -> Prop :=
+| IRP_nil : 
+    forall N x, 
+      IsReversePath N (x::nil)
+| IRP_cons :
+    forall N x y nl,
+      IsReversePath N (x::nl) ->
+      SSEdge x y ->
+      IsReversePath N (y::x::nl).
+
+Definition rev_path_dec_P N := forall n,
+ In Node N n ->
+ exists nl,
+  IsReversePath N (n::nl).
+
+Lemma rev_path_dec :
+forall N,
+ Finite Node N ->
+ Acyclic_Nodes N ->
+ forall n,
+ In Node N n ->
+ exists nl,
+  IsReversePath N (n::nl).
+Proof.
+ intros N Nfin Nacyclic.
+ eapply (RPath_ind Node SSEdge rev_path_dec_P _ _ _ N Nfin _).
+Grab Existential Variables.
+Focus 2.
+ intros A x y Afin INx NINy Rxy IH.
+ unfold rev_path_dec_P in *.
+ intros n INn.
+ destruct (node_eq_dec n x) as [EQ | NEQ].
+ subst n.
+ destruct (IH x INx) as [xnl xP].
+ exists xnl.
+ Admitted.
+
+(* 
+ intros N. generalize dependent n.
+ 
+
+ induction Nfin using RPath_ind.
+  intros n contra. inversion contra.
+  
+ if x = n, 
+ if x -> n, then include it and use the inductive with n = x
+ if x !-> n, then ignore it and use the inductive
+*)
+
+
 Inductive ReversePathEq : Relation Node :=
 | rev_path : forall x y, EdgePathEq x y -> ReversePathEq y x.
 Hint Constructors ReversePathEq.
@@ -824,11 +941,31 @@ Lemma finite_rev_path_end : forall N n,
 Finite Node N ->
 In Node N n ->
 Acyclic_Nodes N ->
-exists y, (ReversePathEq' N n y /\
-(forall z, ReversePathEq' N y z -> y = z)).
+exists y, In Node N y /\
+(ReversePathEq' N n y /\ (forall z, ReversePathEq' N y z -> y = z)).
 Proof.
-  Admitted.
-  
+  intros N n Nfin.
+  generalize dependent n.
+  induction Nfin.
+    Case "Empty_set".
+    intros n contra. inversion contra.
+    Case "(Add Node A x)".
+    intros n nInN' N'acyc.
+    remember (node_eq_dec n x) as nx_eq_dec.
+    inversion nx_eq_dec.
+      SCase "n=x".
+      subst x.
+      clear Heqnx_eq_dec nx_eq_dec nInN'.
+      destruct Nfin. (* trying to find some member of A...*)
+        SSCase "Empty_set".
+          exists n.
+          split. apply Add_intro2.
+          split. constructor; try (apply Add_intro2).
+          auto. intros z rpatheq'.
+          destruct rpatheq' as [A n z nInA zInA rpatheq_bc].
+          assert (n = z) as eq_nz.
+Admitted.   
+
 Lemma bundle_minimal_ex : forall N E N',
 Bundle N E ->
 Included Node N' N ->
@@ -845,18 +982,52 @@ Proof.
   assert (Acyclic_Nodes N') as HacycN'.
     constructor. intros n nInN'.
     destruct Hacyc. apply H. auto.
-  destruct (finite_rev_path_end N' x HfinN' xInN' HacycN') as [y [Hrevxy Hend]].
+  destruct (finite_rev_path_end N' x HfinN' xInN' HacycN') as [y [yInN' [Hrevxy Hend]]].
   exists y. 
-  constructor. clear xInN'.
+  constructor. exact yInN'. clear xInN' yInN'.
   destruct Hrevxy as [N' x y xInN' yInN' revpathxy].
-  exact yInN'.
   intros z zneqy zInN' epatheqny.
   apply zneqy. symmetry. apply (Hend z).
-  constructor. clear xInN'. destruct Hrevxy as [N' x y xInN' yInN' revpathxy].
-  exact yInN'. exact zInN'. constructor. exact epatheqny.
+  constructor. clear xInN'. exact yInN'. exact zInN'.
+  constructor; auto.
 Qed.
 
+SearchAbout Relation list.
+SearchAbout Relation Ensemble.
+(*
+  20130712
+  Andrew: Sat down with Jay and looked at some of the difficulties I was having 
+  with the proofs supporting the minimal member theorem. They seem to revolve around
+  the fact that it is difficult to reason about these Ensembles inductively. The inductive
+  step produces a node for which we know little, if anything, about, and confound what 
+  would otherwise be a straightforward, inductive conclusion. Jay thought this problem
+  of reasoning about Ensembles/Graph's inductively may be related to, or also expressed
+  in the following paper: Inductive Graphs and Functional Graph Algorithms [Martin Erwig].
 
+  -Some of the following general questions came/up and/or were discussed (or mentioned):
 
-   
+  Is there something that can tie a relation to a list? There does not appear to be such
+   a pre-defined area in the Coq stdlib. SearchAbout Relation list produces natta.
 
+  Is there anything predefined that defines Relations inhabiting only elements of an 
+  Ensemble? No, there do not appear to be.
+
+  Is Acyclicity found in the stdlib? The only Coq-Acyclic definitions I could find
+  was the user-contrib GraphBasics.Acyclic (which is about their Graph's acyclicity)
+
+  - I proposed the idea of using less of the Relation definitions for paths and trying to
+  use lists instead (i.e. define comm and pred, and define path's as lists w/ these props). 
+  This would definitely make some concepts easier (doing inductive proofs on these paths
+  would be much more powerful since we could physically reason about the list/path),
+  Jay expressed some concerns that the added baggage of using lists for paths could
+  inhibit future efforts where that baggage becomes troublesome. After some discussion
+  on the potential pros and cons.
+
+  The new goal is using lists for path definitions and then a Bundle can be a list of
+  strands (which are lists) and a list of comm edges (those which connect the strands).
+
+  Possible Problems: This method may lead to induction which frequently produces invalid
+  strands - so this will have to be watched and planned for as it arises. Hopefully
+  this can be pushed down / dealt with at as low a level as possible to prevent it from
+  complicating more interesting, complicated theorems.
+*)
