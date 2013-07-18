@@ -33,16 +33,59 @@ Notation " [ x ] " := (cons x nil).
 Notation " [ x , .. , y ] " := (cons x .. (cons y nil) ..).
 Notation "x :: l" := (cons x l) (at level 60, right associativity). 
 
-(* List whose member's have an inherent relation to their neighbors *)
-Inductive ListWitness {X:Type} : relation X -> list X -> Prop :=
-| listwit_base : forall (R: relation X) (x y:X),
+(* List whose member's have an inherent relation to their neighbors 
+   - a "Prop" list *)
+Inductive PList {X:Type} : relation X -> list X -> Prop :=
+| plist_base : forall (R: relation X) (x y:X),
                    R x y ->
-                   ListWitness R [ x , y ]
-| listwit_hd : forall (R:relation X) (l: list X) (x y:X),
-                 ListWitness R (y :: l)->
+                   PList R [ x , y ]
+| plist_hd : forall (R:relation X) (l: list X) (x y:X),
+                 PList R (y :: l)->
                  R x y ->
-                 ListWitness R (x :: y :: l)
-| listwit_tail : forall (R:relation X) (l:list X) (x y:X),
-                   ListWitness R (l ++ [ x ] ) ->
+                 PList R (x :: y :: l)
+| plist_tail : forall (R:relation X) (l:list X) (x y:X),
+                   PList R (l ++ [ x ] ) ->
                    R x y ->
-                   ListWitness R (l ++ [ x , y ]).
+                   PList R (l ++ [ x , y ]).
+
+Lemma empty_list_error : forall {X:Type} (l: list X) (i:nat),
+l = [] ->
+nth_error l i = None. 
+Proof.
+  intros X l i lnil.
+  subst l.
+  destruct i.
+  simpl. reflexivity.
+  simpl. reflexivity.
+Qed.
+
+Lemma plist_indexs {X:Type} : forall (R:relation X) (l:list X) (x y:X) (i:nat),
+PList R l ->
+nth_error l i = Some x ->
+nth_error l (S i) = Some y ->
+R x y.
+Proof.
+  intros R l x y i PL ni nSi.
+  inversion PL; subst.
+  Case "base".
+    simpl in *.
+    destruct i. simpl in *.
+    inversion ni. subst. inversion nSi. subst.
+    exact H. simpl in nSi. 
+    rewrite empty_list_error in nSi. inversion nSi.
+    reflexivity.
+  Case "PList hd".
+    simpl in nSi.
+
+Lemma list_pair_splice {X:Type} : forall (R:relation X) (l:list X) (x y:X) (i:nat),
+In x l ->
+In y l ->
+nth_error l i = Some x ->
+nth_error l (S i) = Some y ->
+exists lh lt, l = lh ++ [x,y] ++ lt.
+Proof. Admitted.
+
+Lemma plist_inner_pair {X:Type} : forall (R:relation X) (lhd ltail:list X) (x y:X),
+PList R (lhd ++ [x, y] ++ ltail) ->
+R x y.
+Proof. Admitted.
