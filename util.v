@@ -40,14 +40,11 @@ Inductive TPath {X:Type} : relation X -> list X -> Prop :=
 | tpath_base : forall (R: relation X) (x y:X),
                    R x y ->
                    TPath R [ x , y ]
-| tpath_hd : forall (R:relation X) (l: list X) (x y:X),
+| tpath_cons : forall (R:relation X) (l: list X) (x y:X),
                  TPath R (y :: l)->
                  R x y ->
-                 TPath R (x :: y :: l)
-| tpath_tail : forall (R:relation X) (l:list X) (x y:X),
-                   TPath R (l ++ [ x ] ) ->
-                   R x y ->
-                   TPath R (l ++ [ x , y ]).
+                 TPath R (x :: y :: l).
+Hint Constructors TPath.
 
 (* A Transitive Path, with a specified root element *)
 Inductive TPath' {X:Type} : relation X -> list X -> X -> Prop :=
@@ -62,6 +59,13 @@ Inductive TPath'' {X:Type} : relation X -> list X -> X -> X -> Prop :=
               (exists l', l = (x :: l') ++ [ y ]) ->
               TPath R l ->
               TPath'' R l x y.
+
+Definition TPath_Transitivity (X:Type) (R: relation X) : Prop :=
+forall l1 l2 x y z,
+  TPath'' R l1 x y ->
+  TPath'' R l2 y z ->
+  TPath'' R (l1 ++ (tail l2)) x z.
+
 
 Lemma empty_list_error : forall {X:Type} (l: list X) (i:nat),
 l = [] ->
@@ -167,80 +171,102 @@ Proof.
       assert (nth_error (y :: l) (S i) = Some b) as Some_b'.
         simpl in *. exact Some_b.
       apply (IHPL i b a). exact Some_a. exact Some_b'.
-  Case "PList tail".
-    intros i b a Some_a Some_b.
-    assert (i <= (length l) \/ 
-            (i > (length l))) as i_options.
-      omega.
-    destruct i_options as [i_leq | i_gr]. 
-    inversion i_leq as [i_eq | i_lt].
-    SCase "i = length".
-      subst. 
-      rewrite (nth_length X l x y) in Some_a.
-      rewrite (nth_S_length X l x y) in Some_b.
-      inversion Some_a. inversion Some_b. subst. exact H.
-    SCase "i < length l".
-      assert (i <= length l) as i_le_l. omega.
-      remember (valid_index_excl_tail_pair X l x y i i_le_l).
-      assert (S i <= length l) as Si_le_l. omega.
-      remember (valid_index_excl_tail_pair X l x y (S i) Si_le_l).
-      rewrite e in Some_a. rewrite e0 in Some_b.
-      apply (IHPL i b a). exact Some_a. exact Some_b.
-    SCase "i > length".
-      clear IHPL PL.
-      assert (i >= length l) as i_gre_l. omega.
-      assert (S i >= length l) as Si_gre_l. omega.
-      remember (nth_app_snd X l [x, y] i i_gre_l).
-      remember (nth_app_snd X l [x, y] (S i) Si_gre_l).
-      rewrite e in Some_a. rewrite e0 in Some_b.
-      rewrite (Nat.sub_succ_l (length l) i i_gre_l) in Some_b.
-      simpl in *.
-      destruct l. simpl in *. rewrite Nat.sub_0_r in Some_a.
-      rewrite Nat.sub_0_r in Some_b.
-      destruct i.
-      inversion i_gr. inversion Some_b. rewrite empty_list_error in H1.
-      inversion H1. reflexivity.
-      inversion Some_b.
-      assert (i - length (x0 :: l) > 0) as contra. omega.
-      assert ((i - (length (x0 :: l))) >= length [y]). 
-        simpl. inversion contra. omega. omega.
-      rewrite -> (nth_over_index_none X [y] (i - length (x0 :: l))) in Some_b.
-      inversion Some_b. omega.
 Qed.
 
-Lemma tpath_firstn {X:Type} : forall (R: relation X) (l: list X) n,
+Definition sublist {X:Type} (l' l:list X) :=
+exists h t, l = h ++ l' ++ t.
+
+Lemma firstn_empty {X:Type} : forall n (l : list X),
+l = [] ->
+firstn n l = [].
+Proof.
+  intros n l leq.
+  subst. destruct n; auto.
+Qed.
+
+Lemma tpath_non_nil {X:Type} : forall (R:relation X) (l:list X),
 TPath R l ->
-length (firstn n l) >= 2 ->
-TPath R (firstn n l).
-Proof. (* TODO *)
+l <> [].
+Proof.
+  intros R l tpath eq.
+  destruct tpath.
+  inversion eq.
+  inversion eq.
+Qed.
 
-Lemma tpath_split_l {X:Type} : forall (R:relation X) (path:list X),
-TPath R path ->
-exists l r, path = l ++ r ->
-length l >= 2 ->
-TPath R l.
-Proof. (* TODO *)
-
-Lemma tpath_split_r {X:Type} : forall (R:relation X) (path:list X),
-TPath R path ->
-exists l r, path = l ++ r ->
-length r >= 2 ->
-TPath R l.
-Proof. (* TODO *)
-
-Lemma tpath_skipn {X:Type} : forall (R: relation X) (l:list X) n,
+Lemma tpath_min_len {X:Type} : forall (R:relation X) (l:list X),
 TPath R l ->
-length (skipn n l) >= 2 ->
-TPath R (skipn n l).
-Proof. (* TODO *)
+length l > 1.
+Proof.
+  intros R l tpl.
+  destruct tpl.
+  simpl. omega.
+  simpl. omega.
+Qed.
 
-Lemma tpath_inner_pair_R {X:Type} : forall (R:relation X) (lhd ltail:list X) (x y:X),
-TPath R (lhd ++ [x, y] ++ ltail) ->
+Lemma tpath_pair {X:Type} : forall (R:relation X) x y,
+TPath R [x, y] ->
 R x y.
-Proof. (* TODO *)
-  
-  
+Proof.
+  intros R x y tp.
+  inversion tp; subst.
+  exact H1. exact H4.
+Qed.
+
+Lemma tpath_app_hd {X:Type} : forall (R: relation X) (l1 l2 : list X) (x:X),
+TPath R (x :: l2) ->
+TPath R (l1 ++ [x]) ->
+TPath R (l1 ++ (x :: l2)).
+Proof.
+  intros R l1.
+  induction l1.
+  intros l2 x tpxl2 tp_contra.
+  inversion tp_contra.
+  intros l2 x tpxl2 tpal1x.
+  assert ((a :: l1) ++ x :: l2 = a :: (l1 ++ (x :: l2))).
+    simpl. reflexivity. 
+  rewrite H.
+  destruct l1.
+  Case "l1 = []".
+    simpl.
+    apply tpath_cons. exact tpxl2.
+    simpl in tpal1x.
+    apply tpath_pair. exact tpal1x.
+  Case "l1 = x0 :: l1".
+    assert ((a :: (x0 ::l1) ++ x :: l2) = (a :: x0 :: (l1 ++ x :: l2))) as eq.
+    simpl. reflexivity. 
+    rewrite eq.
+    apply tpath_cons.
+    apply IHl1.
+    exact tpxl2.
+    clear eq.
+    assert ((x0 :: l1) ++ [x] = (x0 :: (l1 ++ [x]))) as eq.
+      simpl. reflexivity.
+    rewrite eq.
+    inversion tpal1x; subst. symmetry in H4. apply app_eq_nil in H4. 
+    destruct H4. inversion H1. exact H3. 
+    apply (tpath_adj_index_R R ((a :: x0 :: l1) ++ [x]) a x0 0).
+    exact tpal1x. simpl. simpl. reflexivity.
+    simpl. reflexivity.
+Qed.
+
 (*
+Lemma tpath_sublist {X:Type} : forall (R: relation X) (l l': list X),
+TPath R l ->
+sublist l' l ->
+length l' >= 2 ->
+TPath R l'.
+Proof.
+  intros R l l' tpath sub len.  
+  destruct sub as [h [t]].
+  subst.
+  induction h.
+  Case "h = []".
+    simpl in tpath.
+    induction on 
+
+  
+
 
 Other useful Lemmas?
 

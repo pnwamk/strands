@@ -253,13 +253,13 @@ Hint Constructors CommEdge.
   its own transmission by any reasonable measure. *)
 
 (* A CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive CommEdge' : Nodes -> relation Node :=
-| cedge' : forall N x y,
+Inductive CommEdge_ : Nodes -> relation Node :=
+| cedge_ : forall N x y,
               In x N ->
               In y N ->
               CommEdge x y ->
-              CommEdge' N x y.
-Hint Constructors CommEdge'.
+              CommEdge_ N x y.
+Hint Constructors CommEdge_.
 
 Theorem cedge_imp_neq : forall n m,
  CommEdge n m -> n <> m.
@@ -293,13 +293,13 @@ Inductive PredEdge : relation Node :=
     an edge n1 => n2." *)
 
 (* An CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive PredEdge' : Nodes -> relation Node :=
-| pedge' : forall N x y,
+Inductive PredEdge_ : Nodes -> relation Node :=
+| pedge_ : forall N x y,
               In x N ->
               In y N ->
               PredEdge x y ->
-              PredEdge' N x y.
-Hint Constructors PredEdge'.
+              PredEdge_ N x y.
+Hint Constructors PredEdge_.
 
 Theorem pedge_imp_neq : forall (n m: Node),
 PredEdge n m -> n <> m.
@@ -319,6 +319,52 @@ Proof.
 Qed.
 Hint Resolve pedge_antisymmetry.
 
-(* Bookmark: Just finished defining ListWitness in util.v to provide an inductive 
-   definition for a list whose adjacent elements exhibit a specified property. 
-   Now on to using this to define PredPath and beyond! *)
+Definition PredPath (l:list Node) : TPath PredEdge l.
+
+(*
+TODO?
+
+PredPath' x ->* ...
+PredPath'' x ->* y
+
+*)
+
+Definition SSEdge : relation Node := 
+union Node CommEdge PredEdge.
+
+Inductive SSEdge_ : Nodes -> relation Node :=
+| ssedge_ : forall N x y,
+               In x N ->
+               In y N ->
+               SSEdge x y ->
+               SSEdge_ N x y.
+
+Theorem ssedge_imp_neq : forall (n m:Node),
+SSEdge n m -> n <> m.
+Proof.
+  intros n m Hedge Heq.
+  inversion Hedge; subst.
+  apply (cedge_imp_neq m m); auto.
+  apply (pedge_imp_neq m m); auto.
+Qed.
+
+Theorem ssedge_antisymmetry :
+antisymmetric Node SSEdge.
+Proof.
+  intros n m Hss Hcontra.
+  inversion Hss; subst. inversion Hcontra; subst.
+  apply (cedge_antisymmetry n m H) in H0. exact H0.
+  assert False.
+  inversion H; subst. inversion H0; subst.
+  inversion H1. apply H5. symmetry. exact H2.
+  inversion H1.
+  assert False.
+  inversion Hcontra; subst. inversion H; subst.
+  inversion H0; subst. inversion H3. apply H5.
+  symmetry. exact H1.
+  remember (pedge_antisymmetry n m H). apply e in H0.  
+  remember (pedge_imp_neq n m H). 
+  contradiction. inversion H0.
+Qed.
+
+Definition EdgePath (l:list Node) : TPath SSEdge l.
