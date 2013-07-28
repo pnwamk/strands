@@ -33,39 +33,65 @@ Notation " [ x ] " := (cons x nil).
 Notation " [ x , .. , y ] " := (cons x .. (cons y nil) ..).
 Notation "x :: l" := (cons x l) (at level 60, right associativity). 
 
+Definition hd_opt {X:Type} (l:list X) : option X :=
+match l with
+ | [] => None
+ | h :: t => Some h
+end.
+
+Fixpoint end_opt {X:Type} (l:list X) : option X :=
+ match l with
+   | [] => None
+   | [a] => Some a
+   | h :: t => end_opt t
+ end.
+
 (* List whose member's have an inherent relation to their neighbors 
-   - a Transitive Path, since it represents the path given by the 
-  transitive closure of the relation*)
-Inductive TPath {X:Type} : relation X -> list X -> Prop :=
-| tpath_base : forall (R: relation X) (x y:X),
+   - a Relational Path, since it represents the path given by the 
+  reflexive and/or transitive closure of the relation*)
+Inductive RPath {X:Type} : relation X -> list X -> Prop :=
+| rpath_refl : forall (R: relation X) (x:X),
+                 R x x->
+                 RPath R [x]
+| rpath_step : forall (R: relation X) (x y:X),
                    R x y ->
-                   TPath R [ x , y ]
-| tpath_cons : forall (R:relation X) (l: list X) (x y:X),
-                 TPath R (y :: l)->
+                   RPath R [ x , y ]
+| rpath_cons : forall (R:relation X) (l: list X) (x y:X),
+                 RPath R (y :: l)->
                  R x y ->
-                 TPath R (x :: y :: l).
-Hint Constructors TPath.
+                 RPath R (x :: y :: l).
+Hint Constructors RPath.
 
 (* A Transitive Path, with a specified root element *)
-Inductive TPath' {X:Type} : relation X -> list X -> X -> Prop :=
-| tpath' : forall (R: relation X) (l: list X) (x:X),
-             (exists l', l = x :: l') ->
-             TPath R l ->
-             TPath' R l x.
+Inductive RPath' {X:Type} : relation X -> list X -> X -> Prop :=
+| rpath' : forall (R: relation X) (l: list X) (x:X),
+             hd_opt l = Some x ->
+             RPath R l ->
+             RPath' R l x.
 
 (* A Transitive Path, with specified head and tail elements *)
-Inductive TPath'' {X:Type} : relation X -> list X -> X -> X -> Prop :=
-| tpath'' : forall (R: relation X) (l: list X) (x y:X),
-              (exists l', l = (x :: l') ++ [ y ]) ->
-              TPath R l ->
-              TPath'' R l x y.
+Inductive RPath'' {X:Type} : relation X -> list X -> X -> X -> Prop :=
+| rpath'' : forall (R: relation X) (l: list X) (x y:X),
+              hd_opt l = Some x ->
+              end_opt l = Some y ->
+              RPath R l ->
+              RPath'' R l x y.
 
-Definition TPath_Transitivity (X:Type) (R: relation X) : Prop :=
+Definition RPath_Reflexivity {X:Type} (R: relation X) : Prop :=
+forall x,
+  RPath R [x].
+
+Definition RPath_Transitivity {X:Type} (R: relation X) : Prop :=
 forall l1 l2 x y z,
-  TPath'' R l1 x y ->
-  TPath'' R l2 y z ->
-  TPath'' R (l1 ++ (tail l2)) x z.
+  RPath'' R l1 x y ->
+  RPath'' R l2 y z ->
+  RPath'' R (l1 ++ (tail l2)) x z.
 
+Definition RPath_Antisymmetry {X:Type} (R: relation X) : Prop :=
+forall l1 l2 x y,
+  RPath'' R l1 x y ->
+  RPath'' R l2 y x ->
+  x = y.
 
 Lemma empty_list_error : forall {X:Type} (l: list X) (i:nat),
 l = [] ->
@@ -142,8 +168,8 @@ Proof.
 Qed.
 
 
-Lemma tpath_adj_index_R {X:Type} : forall (R:relation X) (l:list X) (x y:X) (i:nat),
-TPath R l ->
+Lemma rpath_adj_index_R {X:Type} : forall (R:relation X) (l:list X) (x y:X) (i:nat),
+RPath R l ->
 nth_error l i = Some x ->
 nth_error l (S i) = Some y ->
 R x y.
@@ -152,7 +178,11 @@ Proof.
   generalize dependent x. generalize dependent y.
   generalize dependent i.
   induction PL.
-  Case "base".
+  Case "refl".
+       intros i a1 a2 Some_a1 Some_a2.
+       inversion Some_a2.
+       rewrite empty_list_error in H1. inversion H1. reflexivity.
+  Case "step".
     intros i b a Some_a Some_b.
     simpl in *.
     destruct i. simpl in *.
@@ -160,7 +190,7 @@ Proof.
     exact H. simpl in Some_b.
     rewrite empty_list_error in Some_b. inversion Some_b.
     reflexivity.
-  Case "PList hd".
+  Case "cons".
     intros i b a Some_a Some_b.
     destruct i.
     SCase "i = 0".
@@ -184,18 +214,21 @@ Proof.
   subst. destruct n; auto.
 Qed.
 
-Lemma tpath_non_nil {X:Type} : forall (R:relation X) (l:list X),
-TPath R l ->
+Lemma rpath_non_nil {X:Type} : forall (R:relation X) (l:list X),
+RPath R l ->
 l <> [].
 Proof.
-  intros R l tpath eq.
-  destruct tpath.
+  intros R l rpath eq.
+  destruct rpath.
   inversion eq.
-  inversion eq.
+  inversion eq. inversion eq.
 Qed.
 
-Lemma tpath_min_len {X:Type} : forall (R:relation X) (l:list X),
-TPath R l ->
+(*
+Hmmm... no longer true now that RPath can account for reflexive R's
+
+Lemma rpath_min_len {X:Type} : forall (R:relation X) (l:list X),
+RPath R l ->
 length l > 1.
 Proof.
   intros R l tpl.
@@ -203,9 +236,10 @@ Proof.
   simpl. omega.
   simpl. omega.
 Qed.
+*)
 
-Lemma tpath_pair {X:Type} : forall (R:relation X) x y,
-TPath R [x, y] ->
+Lemma rpath_pair {X:Type} : forall (R:relation X) x y,
+RPath R [x, y] ->
 R x y.
 Proof.
   intros R x y tp.
@@ -213,56 +247,47 @@ Proof.
   exact H1. exact H4.
 Qed.
 
-Lemma tpath_app_hd {X:Type} : forall (R: relation X) (l1 l2 : list X) (x:X),
-TPath R (x :: l2) ->
-TPath R (l1 ++ [x]) ->
-TPath R (l1 ++ (x :: l2)).
+Lemma rpath_app_hd {X:Type} : forall (R: relation X) (l1 l2 : list X) (x:X),
+RPath R (x :: l2) ->
+RPath R (l1 ++ [x]) ->
+RPath R (l1 ++ (x :: l2)).
 Proof.
   intros R l1.
-  induction l1.
-  intros l2 x tpxl2 tp_contra.
-  inversion tp_contra.
-  intros l2 x tpxl2 tpal1x.
-  assert ((a :: l1) ++ x :: l2 = a :: (l1 ++ (x :: l2))).
-    simpl. reflexivity. 
-  rewrite H.
-  destruct l1.
+  induction l1;
+  intros l2 x tpxl2 tpl1x.
   Case "l1 = []".
-    simpl.
-    apply tpath_cons. exact tpxl2.
-    simpl in tpal1x.
-    apply tpath_pair. exact tpal1x.
+    simpl. exact tpxl2. 
   Case "l1 = x0 :: l1".
-    assert ((a :: (x0 ::l1) ++ x :: l2) = (a :: x0 :: (l1 ++ x :: l2))) as eq.
-    simpl. reflexivity. 
-    rewrite eq.
-    apply tpath_cons.
-    apply IHl1.
-    exact tpxl2.
-    clear eq.
-    assert ((x0 :: l1) ++ [x] = (x0 :: (l1 ++ [x]))) as eq.
+    destruct l1; simpl.
+    SCase "l1 = []".
+      apply rpath_cons. exact tpxl2.
+      simpl in tpl1x.
+      apply rpath_pair. exact tpl1x.
+    SCase "l1 = x0 :: l1".
+      apply rpath_cons.
+      apply IHl1.
+      exact tpxl2.
+      simpl.
+      inversion tpl1x; subst. symmetry in H3. apply app_eq_nil in H3. 
+      destruct H3. inversion H0. exact H2. 
+      apply (rpath_adj_index_R R ((a :: x0 :: l1) ++ [x]) a x0 0).
+      exact tpl1x. simpl. reflexivity.
       simpl. reflexivity.
-    rewrite eq.
-    inversion tpal1x; subst. symmetry in H4. apply app_eq_nil in H4. 
-    destruct H4. inversion H1. exact H3. 
-    apply (tpath_adj_index_R R ((a :: x0 :: l1) ++ [x]) a x0 0).
-    exact tpal1x. simpl. simpl. reflexivity.
-    simpl. reflexivity.
 Qed.
 
 (*
-Lemma tpath_sublist {X:Type} : forall (R: relation X) (l l': list X),
-TPath R l ->
+Lemma rpath_sublist {X:Type} : forall (R: relation X) (l l': list X),
+Rpath R l ->
 sublist l' l ->
 length l' >= 2 ->
-TPath R l'.
+Rpath R l'.
 Proof.
-  intros R l l' tpath sub len.  
+  intros R l l' rpath sub len.  
   destruct sub as [h [t]].
   subst.
   induction h.
   Case "h = []".
-    simpl in tpath.
+    simpl in rpath.
     induction on 
 
   
@@ -270,7 +295,7 @@ Proof.
 
 Other useful Lemmas?
 
-- For a Tpath' from a finite set, there is a maximum list length
+- For a Rpath' from a finite set, there is a maximum list length
 - Mentioning reverse paths? (use this with above idea to prove minimality?)
 
 *)  
