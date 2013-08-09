@@ -62,14 +62,14 @@ Inductive RPath {X:Type} : relation X -> list X -> Prop :=
                  RPath R (x :: y :: l).
 Hint Constructors RPath.
 
-(* A Transitive Path, with a specified root element *)
+(* A Relational Path, with a specified root element *)
 Inductive RPath' {X:Type} : relation X -> list X -> X -> Prop :=
 | rpath' : forall (R: relation X) (l: list X) (x:X),
              hd_opt l = Some x ->
              RPath R l ->
              RPath' R l x.
 
-(* A Transitive Path, with specified head and tail elements *)
+(* A Relational Path, with specified head and tail elements *)
 Inductive RPath'' {X:Type} : relation X -> list X -> X -> X -> Prop :=
 | rpath'' : forall (R: relation X) (l: list X) (x y:X),
               hd_opt l = Some x ->

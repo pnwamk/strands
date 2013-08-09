@@ -183,13 +183,13 @@ Proof.
   intros X l i. generalize dependent l.
   induction i. 
   Case "length <= 0".
-  intros l H.
-  unfold nth_error in H. unfold error in H.
-  destruct l. auto. inversion H.
+    intros l H.
+    unfold nth_error in H. unfold error in H.
+    destruct l. auto. inversion H.
   Case "length <= S i".
-  intros l' H.
-  destruct l'. simpl; omega.
-  inversion H. apply IHi in H1. simpl. omega. 
+    intros l' H.
+    destruct l'. simpl; omega.
+    inversion H. apply IHi in H1. simpl. omega. 
 Qed.
 
 Theorem node_smsg_valid : 
@@ -236,7 +236,7 @@ Proof.
 Qed.
 
 Inductive CommEdge : relation Node :=
-| cedge :  forall x y t, ((Node_smsg x = tx t /\
+| comm_edge :  forall x y t, ((Node_smsg x = tx t /\
                            Node_smsg y = rx t)
                         /\ Node_strand x <> Node_strand y)
                         -> CommEdge x y.
@@ -253,24 +253,32 @@ Hint Constructors CommEdge.
   its own transmission by any reasonable measure. *)
 
 (* A CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive CommEdge_ : Nodes -> relation Node :=
-| cedge_ : forall N x y,
+Inductive CommSetEdge : Nodes -> relation Node :=
+| comm_sedge : forall N x y,
               In x N ->
               In y N ->
               CommEdge x y ->
-              CommEdge_ N x y.
-Hint Constructors CommEdge_.
+              CommSetEdge N x y.
+Hint Constructors CommSetEdge.
 
-Theorem cedge_imp_neq : forall n m,
+Theorem comm_edge_imp_neq : forall n m,
  CommEdge n m -> n <> m.
  Proof.
    intros n m Hedge Hneq. subst.
    inversion Hedge as [contra_s contra_i]; subst.
    apply H. reflexivity.
  Qed.  
-Hint Resolve cedge_imp_neq.
+Hint Resolve comm_edge_imp_neq.
 
-Theorem cedge_antisymmetry : 
+Theorem comm_edge_refl_false : forall m,
+ CommEdge m m -> False.
+Proof.
+  intros m edge.
+  apply comm_edge_imp_neq in edge.
+  apply edge. reflexivity.
+Qed.
+
+Theorem comm_edge_antisymmetry : 
 antisymmetric Node CommEdge.
 Proof.
   intros n m Hcomm contra.
@@ -280,80 +288,98 @@ Proof.
   destruct H0 as [H Hneq_s2]. destruct H as [Htx2 Hrx2].
   rewrite Htx2 in Hrx1. inversion Hrx1.
 Qed.
-Hint Resolve cedge_antisymmetry.
+Hint Resolve comm_edge_antisymmetry.
 
-(* predecessor edge *)
-(* node's direct predecessor -> node -> Prop *)
-Inductive PredEdge : relation Node :=
-| pedge : forall i j, Node_strand i = Node_strand j 
+(* strand edge *)
+(* Edge representing a node, and the node proceeding it on the same strand. *)
+Inductive StrandEdge : relation Node :=
+| strand_edge : forall i j, Node_strand i = Node_strand j 
                        -> (Node_index i) + 1 = Node_index j 
-                       -> PredEdge i j.
+                       -> StrandEdge i j.
 (* [REF 1] Definition 2.3.4 pg 6
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
-(* An CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive PredEdge_ : Nodes -> relation Node :=
-| pedge_ : forall N x y,
+(* An Strand Edge between nodes, where the set the nodes belong to is specified. *)
+Inductive StrandSetEdge : Nodes -> relation Node :=
+| strand_sedge : forall N x y,
               In x N ->
               In y N ->
-              PredEdge x y ->
-              PredEdge_ N x y.
-Hint Constructors PredEdge_.
+              StrandEdge x y ->
+              StrandSetEdge N x y.
+Hint Constructors StrandSetEdge.
 
-Theorem pedge_imp_neq : forall (n m: Node),
-PredEdge n m -> n <> m.
+Theorem strand_edge_imp_neq : forall (n m: Node),
+StrandEdge n m -> n <> m.
 Proof.
   intros n m Hedge Heq.
   subst. inversion Hedge; subst.
   omega.
 Qed.
-Hint Resolve pedge_imp_neq.
+Hint Resolve strand_edge_imp_neq.
 
-Theorem pedge_antisymmetry :
-antisymmetric Node PredEdge.
+Theorem strand_edge_refl_false : forall m,
+StrandEdge m m -> False.
+Proof.
+  intros m edge.
+  apply strand_edge_imp_neq in edge.
+  apply edge. reflexivity.
+Qed.
+
+Theorem strand_edge_antisymmetry :
+antisymmetric Node StrandEdge.
 Proof.
   intros n m Hpe1 Hpe2.
   destruct Hpe1. destruct Hpe2.
   rewrite <- H0 in H2. omega.
 Qed.
-Hint Resolve pedge_antisymmetry.
+Hint Resolve strand_edge_antisymmetry.
 
-Definition PredPath (l:list Node) : TPath PredEdge l.
+(* A Path representing the transitive closure of StrandEdge. *)
+Definition StrandPath (l:list Node) : RPath StrandEdge l.
 
-(*
-TODO?
+(* A Path representing the transitive closure of PredEdge, starting from x. *)
+Definition StrandPath' (l: list Node) (x: Node) : RPath' StrandEdge l x.
 
-PredPath' x ->* ...
-PredPath'' x ->* y
+(* A Path representing a path of PredEdges from x to y. *)
+Definition StrandPath'' (l: list Node) (x y: Node) : RPath'' StrandEdge l x y.
 
-*)
+Definition XEdge : relation Node := 
+union Node CommEdge StrandEdge.
 
-Definition SSEdge : relation Node := 
-union Node CommEdge PredEdge.
-
-Inductive SSEdge_ : Nodes -> relation Node :=
-| ssedge_ : forall N x y,
+Inductive XSetEdge : Nodes -> relation Node :=
+| x_sedge : forall N x y,
                In x N ->
                In y N ->
-               SSEdge x y ->
-               SSEdge_ N x y.
+               XEdge x y ->
+               XSetEdge N x y.
 
-Theorem ssedge_imp_neq : forall (n m:Node),
-SSEdge n m -> n <> m.
+Inductive XEdgeEq : relation Node :=
+| x_edge_eq_refl : forall x, XEdgeEq x x
+| x_edge_eq_step : forall x y, XEdge x y -> XEdgeEq x y.
+
+Inductive XSetEdgeEq : Nodes -> relation Node :=
+| x_sedge_eq : forall N x y,
+               In x N ->
+               In y N ->
+               XEdgeEq x y ->
+               XSetEdgeEq N x y.
+
+Theorem x_edge_imp_neq : forall (n m:Node),
+XEdge n m -> n <> m.
 Proof.
   intros n m Hedge Heq.
   inversion Hedge; subst.
-  apply (cedge_imp_neq m m); auto.
-  apply (pedge_imp_neq m m); auto.
+  apply (comm_edge_imp_neq m m); auto.
+  apply (strand_edge_imp_neq m m); auto.
 Qed.
 
-Theorem ssedge_antisymmetry :
-antisymmetric Node SSEdge.
+Theorem x_edge_antisymmetry :
+antisymmetric Node XEdge.
 Proof.
   intros n m Hss Hcontra.
   inversion Hss; subst. inversion Hcontra; subst.
-  apply (cedge_antisymmetry n m H) in H0. exact H0.
+  apply (comm_edge_antisymmetry n m H) in H0. exact H0.
   assert False.
   inversion H; subst. inversion H0; subst.
   inversion H1. apply H5. symmetry. exact H2.
@@ -362,9 +388,46 @@ Proof.
   inversion Hcontra; subst. inversion H; subst.
   inversion H0; subst. inversion H3. apply H5.
   symmetry. exact H1.
-  remember (pedge_antisymmetry n m H). apply e in H0.  
-  remember (pedge_imp_neq n m H). 
+  remember (strand_edge_antisymmetry n m H). apply e in H0.  
+  remember (strand_edge_imp_neq n m H). 
   contradiction. inversion H0.
 Qed.
 
-Definition EdgePath (l:list Node) : TPath SSEdge l.
+Definition EdgePath (l:list Node) : RPath XEdge l.
+
+Definition EdgeSetPath (l:list Node) (N: Nodes) : RPath (XSetEdge N) l.
+
+Definition EdgePathEq (l:list Node) : RPath XEdgeEq l.
+
+Definition EdgeSetPathEq (l:list Node) (N: Nodes) : RPath (XSetEdgeEq N) l.
+
+(* Next - Acyclic EdgePath
+  previously this was 
+
+Inductive Acyclic_Node : Node -> Prop :=
+| acyc_node : forall n,  ~(EdgePath n n) -> Acyclic_Node n.
+
+Inductive Acyclic_Nodes : Nodes -> Prop :=
+| acyclic_nodes : forall N,  
+                    (forall n, In Node N n -> 
+                                Acyclic_Node n) -> Acyclic_Nodes N.
+
+Two questions to answer before proceeding:
+  1) Does it Need to be specified as a prop? Can we just have a theorem
+     that is provable from just the definition of EdgePath? It seems like
+     if an EdgePath had a cycle, you would get a contradiction based on 
+     strand indices at a min
+  2) How should this be specified? Specifically for this case? More
+     Generally for RPaths?
+
+ALSO
+ - The RPath definition seems to be okay/working. Is it ideal? Is there some
+   obvious problem? Or improvement?
+
+Also ALSO - I would like to prove an equivalence between the natural transitive
+ and reflexive-transitive closures we were using originally, and these RPath
+ versions if possible. It would be, it feels, very useful to be able to show
+ one implies the other and be able to hop back and forth depending on what I'm
+ trying to prove (Could be wrong... but this seems reasonable...)
+
+*)
