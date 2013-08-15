@@ -1,5 +1,5 @@
 Require String. Open Scope string_scope.
-Require Import Relations List Omega NPeano.
+Require Import Relations Omega NPeano Ensembles Finite_sets Finite_sets_facts List.
 (* Case for clearer analysis *)
 Ltac move_to_top x :=
   match reverse goal with
@@ -440,27 +440,49 @@ Proof.
         apply IHt. exact H2.
 Qed.
 
-(*
-Lemma tpath_sublist {X:Type} : forall (R: relation X) (l l': list X),
-Rpath R l ->
-sublist l' l ->
-length l' >= 2 ->
-Rpath R l'.
+Definition InSet : forall U: Type, Ensemble U -> U -> Prop := Ensembles.In.
+
+Theorem finite_set_list_length {X: Type} : 
+forall (l: list X) (E: Ensemble X) (c: nat),
+cardinal X E c ->
+NoDup l ->
+(forall x, In x l -> InSet X E x) ->
+length l <= c.
 Proof.
-  intros R l l' tpath sub len.  
-  destruct sub as [h [t]].
-  subst.
-  induction h.
-  Case "h = []".
-    simpl in rpath.
-    induction on 
-
-  
-
-
-Other useful Lemmas?
-
-- For a Rpath' from a finite set, there is a maximum list length
-- Mentioning reverse paths? (use this with above idea to prove minimality?)
-
-*)  
+  intros l.
+  induction l as [| h t].
+  Case "l = []".
+    intros E c card nodup In_eq. simpl. omega.
+  Case "l = h :: t".
+    intros E n card nodup In_eq.
+    destruct n as [| n'].
+    SCase "n = 0".
+      assert (InSet X E h) as hinE.
+        apply In_eq. apply in_eq.
+      inversion card; subst.
+      inversion hinE.
+   SCase "n = S n".
+     assert (InSet X E h) as hinE.
+       apply In_eq. apply in_eq.
+     cut (exists E', cardinal X E' n' /\ E = Add X E' h).
+     intros ex_subset.
+     inversion ex_subset as [E' E'props].
+     inversion E'props as [E'card Eeq].
+     assert (length t <= n') as length_helper.
+       apply (IHt E'). exact E'card.
+     inversion nodup; subst. exact H2.
+     intros x xIn.
+     rewrite Eeq in In_eq.
+     assert (InSet X (Add X E' h) x) as xInE.
+       apply In_eq. apply in_cons. exact xIn.
+     assert (x <> h) as xneqh.
+       intros contra.
+       inversion nodup.
+       subst x. contradiction.
+       apply Add_inv in xInE.
+       destruct xInE. exact H. symmetry in H. contradiction.
+       simpl. apply le_n_S. exact length_helper.
+       (* TODO - So I got it proved given you can "destruct" or "unwind" a set 1 known element.
+           Seems very reasonable - If you know x is in X, then there is some X' s.t. X' does not have x
+           and X = X' + {x} - at least mathematically it should be simple. Need to look at what I need
+           to do to prove/confirm this in this particular situation.*)
