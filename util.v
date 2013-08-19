@@ -1,5 +1,5 @@
 Require String. Open Scope string_scope.
-Require Import Relations Omega NPeano Ensembles Finite_sets Finite_sets_facts List.
+Require Import Relations Omega NPeano Ensembles Finite_sets Finite_sets_facts List ListSet.
 (* Case for clearer analysis *)
 Ltac move_to_top x :=
   match reverse goal with
@@ -440,7 +440,420 @@ Proof.
         apply IHt. exact H2.
 Qed.
 
-Definition InSet : forall U: Type, Ensemble U -> U -> Prop := Ensembles.In.
+Section set_util.
+
+
+
+  Variable X : Type.
+  Hypothesis Xeq_dec : forall x y:X, {x = y} + {x <> y}.
+
+Fixpoint set_subtract (s : set X) (x:X) : set X :=
+  match s with
+    | [] => []
+    | h :: rest 
+      => match (Xeq_dec h x) with 
+           | (* eq *) left _ =>  rest
+           | (* neq *) right _ => (set_add Xeq_dec h (set_subtract rest x))
+         end
+  end.
+Hint Unfold set_subtract.
+
+Lemma set_subtract_neg_In : forall (s: set X) (x:X),
+NoDup s ->
+~set_In x (set_subtract s x).
+Proof.
+  intros s.
+  induction s.
+  Case "[]".
+    intros x nodup x_mem.
+    simpl in x_mem. exact x_mem.
+  Case "a :: s".
+    intros x nodup x_mem.
+    inversion nodup; subst.
+    destruct (Xeq_dec x a) as [eq | neq].
+    SCase "x=a".
+      subst x.
+      assert ((set_subtract (a :: s) a) = s) as subset_ran.
+        unfold set_subtract. simpl. destruct (Xeq_dec a a). reflexivity. 
+        assert False as F. apply n. reflexivity. inversion F.
+      rewrite subset_ran in x_mem.
+      contradiction.
+      SCase "x<>a".
+        simpl in x_mem. destruct (Xeq_dec a x) as [eq1 | leq1]. apply neq. auto.
+        apply set_add_elim in x_mem.
+        destruct x_mem. apply leq1. auto.
+        apply (IHs x) in H2.
+        apply H2. exact H.
+Qed.
+
+Lemma set_subtract_imp_subset : forall (s : set X) (x: X),
+NoDup s ->
+set_In x s ->
+forall y : X,
+set_In y s ->
+y <> x ->
+set_In y (set_subtract s x).
+Proof. 
+  intros s.
+  induction s.
+  Case "[]".
+    intros x nodup xIn.
+    inversion xIn.
+  Case "a :: s".
+    intros x nodup xIn y yIn xyneq.
+    destruct (Xeq_dec a x).
+    SCase "a = x".
+      subst.
+      simpl. destruct (Xeq_dec x x) as [axeq | axneq].
+      inversion yIn; subst.
+      assert False as F. apply xyneq. reflexivity. inversion F.
+      exact H.
+      assert False as F. apply axneq. reflexivity. inversion F.
+    SCase "a <> x".
+      destruct (Xeq_dec y a) as [ayeq | ayneq].
+      SSCase "a = y".
+        subst. simpl. 
+        destruct (Xeq_dec a x). assert False as F. apply xyneq. exact e. inversion F.
+        apply set_add_intro. left. reflexivity. 
+      SSCase "a <> y".
+        simpl.
+        destruct (Xeq_dec a x) as [axeq | axneq].
+        inversion yIn; subst. assert False as F. apply xyneq. auto. inversion F.
+        exact H.
+        apply set_add_intro1.
+        apply IHs. auto.
+        assert (NoDup s) as nodup_s.
+          inversion nodup; subst. exact H2.
+       exact nodup_s.
+       inversion xIn; subst.
+       assert False as F. apply n. reflexivity. inversion F.
+       exact H.
+       inversion xIn.
+       assert False as F. apply n. rewrite H. reflexivity. inversion F.
+       inversion yIn; subst. assert False as F. apply ayneq. reflexivity. inversion F.
+       exact H0.
+       exact xyneq.
+Qed.
+
+Definition InSet : forall U : Type, Ensemble U -> U -> Prop := Ensembles.In.
+
+Lemma set_imp_ensemble : forall (s: set X),
+NoDup s ->
+exists E:Ensemble X, (forall x, set_In x s <-> InSet X E x) /\ 
+  exists n, (length s = n) /\ (cardinal X E n).
+Proof.
+  intros s nodup. generalize dependent nodup.
+  induction s; intros nodup.
+  Case "[]".
+    exists (Empty_set X).
+    split.
+    SCase "set_In <-> InSet".
+      intros x.
+      split. intros setin. inversion setin.
+      intros  inset. inversion inset.
+   SCase "length = size".
+     exists 0. 
+     split. simpl. reflexivity.
+     constructor.
+ Case "a :: s".    
+   destruct IHs as [E [Hin Hcard]].
+   inversion nodup; subst. exact H2.
+   exists (Add X E a).
+   split.
+    SCase "set_In <-> InSet".
+      intros x.
+      split.
+      SSCase "->".
+        destruct (Xeq_dec a x) as [eqax | neqax].
+        intros setIn. subst x.
+        apply Add_intro2.
+        intros setIn.
+        destruct (Hin x) as [setInx InSetx].
+        inversion setIn. assert False as F. apply neqax. exact H. inversion F.
+        apply setInx in H. eapply Add_intro1 in H. exact H.
+      SSCase "<-".
+        intros inSet.
+        destruct (Xeq_dec a x) as [eqax | neqax].
+        subst. simpl. left. reflexivity. 
+        inversion inSet; subst.
+        apply Hin in H.
+        simpl. right. exact H.
+        inversion H.
+        assert False as F. apply neqax. exact H0. inversion F.
+   SCase "length = size".
+     destruct (set_In_dec Xeq_dec a s) as [ins | nins].
+     inversion nodup; subst.
+     assert False as F. apply H1. exact ins. inversion F.
+     destruct Hcard as [n [len card]].
+     exists (S n).
+     split. simpl. auto.
+     apply card_add. exact card.
+     intros contra.
+     destruct (Hin a) as [setIna InSeta].
+     apply InSeta in contra.
+     apply nins. exact contra.
+Qed.
+
+Lemma set_add_Sn : forall (s: set X) (x: X) (n:nat),
+~ set_In x s ->
+length s = n ->
+length (set_add Xeq_dec x s) = S n.
+Proof.
+  intros s.
+  induction s.
+  Case "[]".
+    intros x n notIn len.
+    simpl. simpl in len.
+    auto.
+  Case "a :: s".
+    intros x n notIn len.
+    simpl. destruct (Xeq_dec x a).
+    subst x.
+    assert False as F. apply notIn. simpl. left. reflexivity. inversion F.
+    simpl. rewrite <- len. simpl. destruct n. inversion len.
+    assert (~ set_In x s) as xnotIns. 
+      intros contra. apply notIn. simpl. right. exact contra.
+    assert (length s = n) as slen. auto.      
+    rewrite (IHs x n xnotIns slen).
+    subst. 
+    reflexivity.
+Qed.
+
+Lemma set_add_nodup : forall x s,
+NoDup (x :: s) ->
+NoDup (set_add Xeq_dec x s).
+Proof.
+  intros x s. generalize dependent x.
+  induction s.
+  Case "[]".
+    intros x xnotIn.
+    simpl. exact xnotIn.
+  Case "a :: s".
+    intros x nodup.
+    simpl.
+    destruct (Xeq_dec x a) as [eqxa | neqxa].
+    subst. inversion nodup. assert False as F. apply H1. simpl. left. reflexivity. inversion F.
+    inversion nodup; subst. inversion H2; subst.
+    assert (~ In x s) as notxIns.
+      intros contra. apply H1. simpl. right. exact contra.
+    assert (NoDup (x :: s)) as xsnodup.
+      constructor. exact notxIns. exact H4.
+    constructor.
+    intros contra.
+    apply set_add_elim2 in contra.
+    apply H3. exact contra.
+    intros contra2. subst. inversion nodup. apply H5. simpl. left. reflexivity.
+    apply IHs. exact xsnodup.
+Qed.
+
+
+Lemma ensemble_imp_set : forall (E: Ensemble X),
+Finite X E ->
+exists s: set X, (forall x, set_In x s <-> InSet X E x) /\
+  NoDup s /\
+  exists n, (length s = n) /\ (cardinal X E n).
+Proof.
+  intros E fin.
+  induction fin.
+  Case "Empty_set".
+    exists nil.
+    split.
+    intros x. 
+    split. intros setIn. inversion setIn.
+    intros inSetx. inversion inSetx.
+    split. constructor.
+    exists 0. split. simpl. reflexivity.
+    apply card_empty.
+  Case "Add x".
+    destruct IHfin as [s [Hin [Hnodup Hcard]]].
+    exists (set_add Xeq_dec x s).
+    split.
+     SCase "set_In <-> InSet".
+       intros a.
+       split.
+       SSCase "->".
+         intros setInx.
+         apply set_add_elim in setInx.
+         destruct setInx as [eqax | aIns].
+         subst a. apply Add_intro2. 
+         apply Add_intro1. apply Hin. exact aIns.
+       SSCase "<-".
+         intros InSeta.
+         inversion InSeta; subst.
+         apply set_add_intro.
+         right.
+         destruct (Hin a) as [HsetIn HInSet].
+         apply HInSet.
+         exact H0.
+         inversion H0. subst.
+         apply set_add_intro. left. reflexivity.
+       split.
+     SCase "NoDup s".
+       assert (~ set_In x s) as xnotIns.
+         destruct (set_In_dec Xeq_dec x s).
+         apply Hin in s0. assert False as F. apply H. exact s0. inversion F.
+         exact n.
+         assert (NoDup (x :: s)) as xsnodup.
+           constructor. exact xnotIns. exact Hnodup.
+           apply set_add_nodup. exact xsnodup.
+     SCase "length /\ card".
+       destruct Hcard as [n [slen Acard]].
+       destruct (set_In_dec Xeq_dec x s).
+       SSCase "x in s".
+         destruct (Hin x) as [HsetIn HInSet].
+         assert False as F. apply H. apply HsetIn.
+         exact s0. inversion F.
+       SSCase "x not in s".
+         exists (S n).
+         split.
+         apply set_add_Sn. exact n0. exact slen.
+         apply card_add. exact Acard. exact H.
+Qed.
+
+Lemma in_subtract_imp_in : forall s a x,
+In a (set_subtract s x) ->
+In a s.
+Proof.
+  intros s.
+  induction s.
+  intros a x Hin.
+  simpl in Hin. inversion Hin.
+  intros x y Hin.
+  simpl.
+  destruct (Xeq_dec a y) as [eqay | neqay].
+    subst.
+    simpl in Hin.
+    destruct (Xeq_dec y y).
+    right. exact Hin.
+    assert False as F. apply n. reflexivity. inversion F.
+    simpl in Hin.
+    destruct (Xeq_dec a y).
+    right. exact Hin.
+    apply set_add_elim in Hin.
+    destruct Hin. left. auto.
+    apply IHs in H.
+    right. exact H.
+Qed.
+
+Lemma set_subtract_nodup : forall s x,
+NoDup s ->
+NoDup (set_subtract s x).
+Proof.
+  intros s.
+  induction s.
+  Case "[]".
+    intros x nodup.
+    simpl. exact nodup.
+  Case "a :: s".
+    intros x nodup.
+    simpl.
+    destruct (Xeq_dec a x) as [eqax | neqax].
+    inversion nodup; subst. exact H2.
+    apply set_add_nodup. 
+    constructor.
+
+    intros contra.
+    SearchAbout set_subtract.
+    inversion nodup; subst. apply H1.
+    eapply in_subtract_imp_in.
+    exact contra.
+    apply IHs.
+    inversion nodup. exact H2.
+Qed.
+
+Lemma set_subtract_count : forall x s n,
+NoDup s ->
+set_In x s ->
+length s = S n ->
+length (set_subtract s x) = n.
+Proof.
+  intros x s. generalize dependent x.
+  induction s.
+  Case "[]".
+    intros x n nodup xin.
+    inversion xin.
+  Case "a :: s".
+    intros x n nodup xIn len.
+    destruct (Xeq_dec a x) as [eqax | neqax].
+      subst. simpl.
+      destruct (Xeq_dec x x). inversion len. reflexivity.
+      assert False as F. apply n0. reflexivity. inversion F.
+    assert (set_In x s) as xIns.
+      inversion xIn. assert False as F. apply neqax. exact H. inversion F.
+      exact H.
+    destruct n.
+    SCase "n = 0".
+      inversion len.
+      destruct s. inversion xIns.
+      inversion H0.
+    SCase "n = S n".
+      simpl.
+      destruct (Xeq_dec a x) as [eqax | neqax2].
+      assert False as F. apply neqax. exact eqax. inversion F.
+      eapply set_add_Sn.
+      intros contra. inversion nodup.
+      apply H1. eapply in_subtract_imp_in. exact contra.
+      apply IHs.
+      inversion nodup. exact H2.
+      exact xIns.
+      inversion len. reflexivity.
+Qed.
+
+Lemma ensemble_element_sub : forall E x n,
+InSet X E x ->
+cardinal X E (S n) ->
+exists E' : Ensemble X, cardinal X E' n /\ E = Add X E' x. 
+Proof.
+  intros E x n xInE cardSn.
+  assert (Finite X E) as Efin. eapply cardinal_finite. exact cardSn.
+  apply ensemble_imp_set in Efin.
+  destruct Efin as [s [Hin [Hnodup Hlen]]].
+  destruct Hlen as [j [slen cardE]].
+  assert (j = S n) as eqjSn.
+    eapply cardinal_unicity. exact cardE. exact cardSn.
+  assert (set_In x s). apply Hin. exact xInE.
+  assert (forall y : X, set_In y s -> y <> x -> set_In y (set_subtract s x)) as Hallnotx.
+  apply set_subtract_imp_subset. exact Hnodup. exact H.
+  assert (NoDup (set_subtract s x)) as nodupsminx.
+    apply set_subtract_nodup. exact Hnodup.
+  destruct (set_imp_ensemble (set_subtract s x) nodupsminx) as [E' [HE'in HE'len]].
+  exists E'.
+  split.
+  destruct HE'len as [n' [HElen HEcard]].
+  assert (n' = n) as eqns.
+  assert (length (set_subtract s x) = n) as HElen2.
+    apply set_subtract_count. exact Hnodup. exact H.
+    omega.
+  omega. rewrite eqns in HEcard. exact HEcard. 
+  apply Extensionality_Ensembles.
+  
+  (* BOOKMARK / TODO *)
+
+End set_util.
+
+
+(* todo FINISH set_subtract_imp_subset
+   create ListSet / Finite Ensemble isomorphism
+   Figure out bridge to finite_set_list_length *)
+
+(*
+   Need to be able to use the following Hypothesis to prove the exists
+
+   InSet X E h ->
+   exists E' : Ensemble X, cardinal X E' n' /\ E = Add X E' h
+*)
+
+
+(*)
+Lemma in_imp_ex_subset : forall (s: set X) (x:X),
+NoDup s ->
+set_In x s ->
+s = set_add Xeq_dec x (set_subtract s x). *)
+(* Bookmark *)
+(* Ugh... does this "eq" work here? I don't think it's = but it is definitily "set_eq" if that
+   exists, either way I think I need a rewrite rule from it... =| *)
+
+
 
 Theorem finite_set_list_length {X: Type} : 
 forall (l: list X) (E: Ensemble X) (c: nat),
@@ -479,10 +892,14 @@ Proof.
        intros contra.
        inversion nodup.
        subst x. contradiction.
-       apply Add_inv in xInE.
-       destruct xInE. exact H. symmetry in H. contradiction.
-       simpl. apply le_n_S. exact length_helper.
-       (* TODO - So I got it proved given you can "destruct" or "unwind" a set 1 known element.
-           Seems very reasonable - If you know x is in X, then there is some X' s.t. X' does not have x
-           and X = X' + {x} - at least mathematically it should be simple. Need to look at what I need
-           to do to prove/confirm this in this particular situation.*)
+     apply Add_inv in xInE.
+     destruct xInE. exact H. symmetry in H. contradiction.
+     simpl. apply le_n_S. exact length_helper.
+     apply ensemble_element_sub.
+     exact hinE.
+     exact card.
+Qed.
+
+
+
+
