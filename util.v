@@ -805,12 +805,12 @@ cardinal X E (S n) ->
 exists E' : Ensemble X, cardinal X E' n /\ E = Add X E' x. 
 Proof.
   intros E x n xInE cardSn.
-  assert (Finite X E) as Efin. eapply cardinal_finite. exact cardSn.
+  assert (Finite X E) as Efin. apply (cardinal_finite X E (S n)). exact cardSn.
   apply ensemble_imp_set in Efin.
   destruct Efin as [s [Hin [Hnodup Hlen]]].
   destruct Hlen as [j [slen cardE]].
   assert (j = S n) as eqjSn.
-    eapply cardinal_unicity. exact cardE. exact cardSn.
+    apply (cardinal_unicity X E). exact cardE. exact cardSn.
   assert (set_In x s). apply Hin. exact xInE.
   assert (forall y : X, set_In y s -> y <> x -> set_In y (set_subtract s x)) as Hallnotx.
   apply set_subtract_imp_subset. exact Hnodup. exact H.
@@ -826,8 +826,31 @@ Proof.
     omega.
   omega. rewrite eqns in HEcard. exact HEcard. 
   apply Extensionality_Ensembles.
-  
-  (* BOOKMARK / TODO *)
+  unfold Same_set.
+  split.
+  Case "Included X e (Add X E' x)".
+    unfold Included. intros y yInE.
+    destruct (Xeq_dec x y) as [eqxy | neqxy].
+    SCase "x = y".
+      rewrite eqxy.
+      apply Add_intro2.
+    SCase "x <> y".
+      apply Add_intro1. apply HE'in. apply Hallnotx.
+      apply Hin. exact yInE. intros contra. apply neqxy. auto.
+  Case "Included X (Add X e' x) E".
+    unfold Included. intros y yInAddE'.
+    destruct (Xeq_dec x y) as [eqxy | neqxy].
+    SCase "x = y".
+      rewrite <- eqxy.
+      exact xInE.
+    SCase "x <> y".
+      apply Hin.
+      destruct yInAddE' as [y yInE' | y inSingleton].
+      apply HE'in in yInE'. apply in_subtract_imp_in in yInE'.  exact yInE'.
+      inversion  inSingleton.
+      assert False as F. apply neqxy. exact H0.
+      inversion F.
+Qed.
 
 End set_util.
 
@@ -857,6 +880,7 @@ s = set_add Xeq_dec x (set_subtract s x). *)
 
 Theorem finite_set_list_length {X: Type} : 
 forall (l: list X) (E: Ensemble X) (c: nat),
+(forall x y : X, {x = y} + {x <> y}) ->
 cardinal X E c ->
 NoDup l ->
 (forall x, In x l -> InSet X E x) ->
@@ -865,9 +889,9 @@ Proof.
   intros l.
   induction l as [| h t].
   Case "l = []".
-    intros E c card nodup In_eq. simpl. omega.
+    intros E c eq_dec card nodup In_eq. simpl. omega.
   Case "l = h :: t".
-    intros E n card nodup In_eq.
+    intros E n eq_dec card nodup In_eq.
     destruct n as [| n'].
     SCase "n = 0".
       assert (InSet X E h) as hinE.
@@ -882,7 +906,7 @@ Proof.
      inversion ex_subset as [E' E'props].
      inversion E'props as [E'card Eeq].
      assert (length t <= n') as length_helper.
-       apply (IHt E'). exact E'card.
+       apply (IHt E'). exact eq_dec. exact E'card.
      inversion nodup; subst. exact H2.
      intros x xIn.
      rewrite Eeq in In_eq.
@@ -896,8 +920,7 @@ Proof.
      destruct xInE. exact H. symmetry in H. contradiction.
      simpl. apply le_n_S. exact length_helper.
      apply ensemble_element_sub.
-     exact hinE.
-     exact card.
+     exact eq_dec. exact hinE. exact card.
 Qed.
 
 
