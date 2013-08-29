@@ -329,6 +329,64 @@ Proof.
     exact H1. exact H4.
 Qed.
 
+Lemma tpath_app_imp_tpath_l {X:Type} : forall R (l1 l2 : list X),
+length l1 > 1 ->
+TPath R (l1 ++ l2) ->
+TPath R l1.
+Proof.
+  intros R l1.
+  induction l1.
+  intros l2 len tpath.
+  inversion len.
+  intros l2 len tpath.
+  destruct l1.
+  inversion len. omega.
+  destruct l1. inversion tpath. subst. constructor. exact H1. 
+  subst. constructor. exact H4. 
+  constructor.
+  eapply IHl1. simpl. omega.
+  inversion tpath; subst.
+  exact H2.
+  inversion tpath; subst.
+  exact H4.
+Qed.
+
+Lemma tpath_exclude_rest {X:Type} : forall R (x y : X) lf rest,
+TPath R (x :: (lf ++ y :: rest)) ->
+TPath R (x :: lf ++ [y]).
+Proof.
+  intros R x y lf rest tpath.
+  induction rest.
+  exact tpath.
+  assert (x :: lf ++ y :: a :: rest = ((x :: lf) ++ [y]) ++ (a :: rest)) as triveq.
+    rewrite (app_assoc_reverse (x :: lf) [y] (a :: rest)). simpl.
+    reflexivity.
+  rewrite triveq in tpath.
+  apply (tpath_app_imp_tpath_l R (x :: lf ++ [y]) (a :: rest)).
+  assert (x :: lf ++ [y] = (x :: lf) ++ [y]). simpl. reflexivity.
+  rewrite H.
+  rewrite (app_length (x :: lf) [y]). simpl. omega.
+  simpl. simpl in tpath. exact tpath.
+Qed.
+
+Lemma rest_mem_imp_tpath'' {X:Type} : forall R l (x y: X),
+In y l ->
+TPath R (x :: l) ->
+exists l', TPath'' R l' x y.
+Proof.
+  intros R l x y yIn tpath.
+  destruct (in_split y l yIn) as [lf [lt lapp]].
+  exists (x :: lf ++ [y]).
+  constructor; auto.
+  remember (last_opt_nonnil (x :: lf) ([y])).
+  simpl in e.
+  assert (y :: [] <> []).
+    intros contra. inversion contra.
+  remember (e H). rewrite <- e0.
+  simpl. reflexivity.
+  subst l.
+  eapply (tpath_exclude_rest). exact tpath.
+Qed.
 
 Theorem trans_imp_tpath {X:Type} : forall R (x y: X),
 clos_trans X R x y->
