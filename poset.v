@@ -779,8 +779,20 @@ Lemma minimal_finite_ensemble_mem : forall E n,
 cardinal X E (S n) ->
 exists min, forall y, InSet X E y -> ~R y min.
 Proof.
-Admitted.
-  
- 
+  intros E n card.
+  assert (Finite X E) as finE.
+    eapply cardinal_finite. exact card.
+  destruct (ensemble_imp_set E finE) as [s [allIn [nodup [i [slen scard]]]]].
+  assert (s <> nil) as nonil.
+    intros contra. subst s. simpl in slen. subst i. inversion scard. subst E.
+    inversion card. symmetry in H. apply not_Empty_Add in H. inversion H.
+  destruct (exists_empty_lt_set s nodup nonil) as [min ltnil].
+  exists min.
+  intros y yIn contraR.
+  assert (set_In y s) as yIns. apply allIn. exact yIn.
+  apply (lt_set_rel_equiv min y s yIns) in contraR.
+  rewrite ltnil in contraR.
+  inversion contraR.
+Qed.
 
 End strict_order.
