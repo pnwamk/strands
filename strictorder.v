@@ -222,7 +222,7 @@ Variable R : Relation X.
  Definition Irreflexive (X:Type) (R:Relation X) : Prop := forall x:X, ~R x x.
   Inductive StrictOrder (X:Type) (R:Relation X) : Prop :=
        Definition_of_order :
-         Irreflexive X R -> Transitive X R -> Antisymmetric X R -> StrictOrder X R.
+         Irreflexive X R -> Transitive X R -> StrictOrder X R.
 
  Hypothesis Rdec : forall (x y:X), {R x y} + {~R x y}.
  Hypothesis Rso : StrictOrder X R.
@@ -595,61 +595,6 @@ Proof.
     contradiction.
 Qed.
 
-Lemma lt_imp_lt_set_subset : forall x y s,
-R y x ->
-forall z, In z (lt_set y s) -> In z (lt_set x s).
-Proof.
-  intros x y s Ryx z Inlty.
-  assert (R z x) as Rzx.
-    eapply Rso. eapply lt_set_rel_equiv.
-    eapply in_lt_imp_in_set. exact Inlty.
-    exact Inlty. exact Ryx.
-  apply lt_set_rel_equiv. eapply in_lt_imp_in_set.
-  exact Inlty.
-  exact Rzx.
-Qed.
-
-(*
-Lemma kobayashimaru : forall (b : X) (A B : set X),
-~set_In b A ->
-set_diff Xeq_dec A (b :: B) = set_diff Xeq_dec A B.
-Proof.
-  intros b A B notInA.
-  induction A.
-  Case "[]".
-    simpl. reflexivity.
-  Case "[b :: B']".
-    assert (~ set_In b A) as Awithoutb. intros contra. 
-      apply notInA. right. exact contra.
-    assert (set_diff Xeq_dec A (b :: B) = set_diff Xeq_dec A B) as indeq.
-    apply IHA. apply Awithoutb.
-    simpl.
-    destruct (Xeq_dec a b) as [eqab | neqab].
-    SCase "a = b".
-      subst a. 
-      assert False as F. apply notInA. left. reflexivity. inversion F.
-    SCase "a <> b".
-      destruct (set_mem Xeq_dec a B) as [amemB | anotmemB].
-      rewrite indeq. reflexivity. rewrite indeq. reflexivity.
-Qed.
-*)
-
-Lemma subset_imp_length_le : forall (A B : set X),
-NoDup A ->
-NoDup B ->
-(forall x, set_In x A -> set_In x B) ->
-length A <= length B.
-Proof.
-  intros A B nodupA nodupB subsetAB.
-  destruct (set_imp_ensemble A nodupA) as [EA [allInA [na [Alen EAcard]]]].
-  destruct (set_imp_ensemble B nodupB) as [EB [allInB [nb [Blen EBcard]]]].
-  assert (Included X EA EB) as Esub.
-    intros x inEA. apply allInB. apply subsetAB. apply allInA. exact inEA.
-  subst nb. subst na.
-  eapply incl_card_le. exact EAcard. exact EBcard. exact Esub.
-Qed.
-
-
 Lemma lt_preserve_nodup : forall x s,
 NoDup s ->
 NoDup (lt_set x s).
@@ -669,44 +614,6 @@ Proof.
       intros contra. apply H1. eapply in_lt_imp_in_set.
       exact contra. apply IHrest. exact H2.
       apply IHrest. inversion nodup; auto.
-Qed.
-      
-Lemma lt_set_size_lt_subset : forall x y s,
-NoDup s ->
-In y (lt_set x s) ->
-length (lt_set y s) < length (lt_set x s).
-Proof.
-  intros x y s nodup yInlt.
-  assert (NoDup (lt_set y s)) as nodupylt.
-    apply lt_preserve_nodup. exact nodup.
-  assert (NoDup (lt_set x s)) as nodupxlt.
-    apply lt_preserve_nodup. exact nodup.
-  destruct (set_imp_ensemble (lt_set y s) nodupylt) as [Eylt [allInyltA [ny [yltlen Eyltcard]]]].
-  destruct (set_imp_ensemble (lt_set x s) nodupxlt) as [Exlt [allInxltA [nx [xltlen Exltcard]]]].
-  assert (Strict_Included X Eylt Exlt).
-    split.
-    intros q inEylt.
-    apply allInxltA.
-    apply lt_set_rel_equiv.
-    apply allInyltA in inEylt.
-    eapply in_lt_imp_in_set.
-    assert (R q y) as Rqy. apply lt_set_rel_equiv in inEylt. exact inEylt.
-    eapply in_lt_imp_in_set. exact inEylt. exact inEylt.
-    destruct Rso as [Refl Trans AntiSymm]. apply (Trans q y x).
-    eapply lt_set_rel_equiv.
-    assert (set_In q (lt_set y s)) as qInylt. apply allInyltA. exact inEylt.
-    eapply in_lt_imp_in_set. exact qInylt. apply allInyltA. exact inEylt.
-    eapply lt_set_rel_equiv. eapply in_lt_imp_in_set. exact yInlt.
-    exact yInlt.
-    intros contraeq.
-    assert (set_In y (lt_set y s)).
-      apply allInyltA. subst Eylt. apply allInxltA. exact yInlt.
-    apply lt_set_rel_equiv in H. eapply Rso. exact H.
-    eapply in_lt_imp_in_set. exact H.
-    eapply incl_st_card_lt.
-    subst ny. exact Eyltcard.
-    subst nx. exact Exltcard.
-    exact H.
 Qed.
 
 Lemma exists_empty_lt_set : forall s,
@@ -763,16 +670,6 @@ Proof.
   simpl.
   destruct (Rdec a m). contradiction.
   exact mltmt. inversion nodup; auto.
-Qed.
-
-Lemma empty_lt_imp_no_pred : forall (x:X) s,
-lt_set x s = nil ->
-forall y, set_In y s -> ~ R y x.
-Proof.
-  intros x s ltempty y yIn contra.
-  assert (set_In y (lt_set x s)) as contraIn.
-    apply lt_set_rel_equiv. exact yIn. exact contra.
-    rewrite ltempty in contraIn. inversion contraIn.
 Qed.
 
 Lemma minimal_finite_ensemble_mem : forall E n,
