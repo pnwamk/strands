@@ -497,12 +497,9 @@ Proof.
         SSSCase "Rxy".
           destruct (Rdec y x) as [Ryx | nRyx].
           SSSSCase "Ryx".
-            assert (x = y) as contraeq.
-              apply Rso. exact Rxy. apply Ryx.
-            subst x.
-            apply IHs'.
-            eapply in_norel_imp_in_set. exact yInlt.
-            exact yInlt.
+            assert (R x x) as contraR.
+              eapply Rso. exact Rxy. exact Ryx.
+            apply Rso in contraR. inversion contraR.
           SSSSCase "~Ryx".
             apply IHs'.
             eapply in_norel_imp_in_set. exact yInlt.
@@ -622,67 +619,66 @@ s <> nil ->
 exists x, lt_set x s = nil.
 Proof.
   intros s nodup notempty.
-  induction s.
-  assert False as F. apply notempty. reflexivity. inversion F.
-  destruct s.
-  exists a. simpl.
-  destruct (Rdec a a).
-  assert False as F. eapply Rso. exact r. inversion F. reflexivity.
-  assert (x :: s <> []).
-  intros contra. inversion contra.
-  apply IHs in H. destruct H as [m mltmt].
-  destruct (Rdec a m).
-  exists a. simpl. destruct (Rdec a a).
-  assert False as F. eapply Rso. exact r0. inversion F.
-  destruct (Rdec x a).
-  assert (set_In x (lt_set m (x :: s))) as contra.
-    apply lt_set_rel_equiv. left. reflexivity. eapply Rso.
-    exact r0. exact r.
-  rewrite mltmt in contra. inversion contra.
-  induction s. simpl. reflexivity.
-  simpl.
-  destruct (Rdec a0 a).
-  assert (set_In a0 (lt_set m (x :: a0 :: s))).
-    eapply lt_set_rel_equiv. right. left. reflexivity.
-    eapply Rso. exact r0. exact r.
-  rewrite mltmt in H. inversion H.
-  apply IHs0.
-  inversion nodup; subst. inversion H2; subst. inversion H4; subst.
-  constructor.
-  intros contra. inversion contra. subst.
-  inversion nodup. apply H7. left. reflexivity.
-  inversion nodup; subst. inversion contra. subst x.
-  apply H1. left. reflexivity.
-  apply H8. right. right. exact H0.
-  constructor. intros contra. apply H3. right. exact contra.
-  exact H6. intros contra. inversion contra.
-  intros nodupxs neq.
-  exists m.
-  simpl. simpl in mltmt.
-  destruct (Rdec x m). apply set_add_not_empty in mltmt. inversion mltmt.
-  destruct (Rdec a0 m). apply set_add_not_empty in mltmt. inversion mltmt.
-  exact mltmt.
-  simpl in mltmt. simpl.
-  destruct (Rdec x m). apply set_add_not_empty in mltmt. inversion mltmt.
-  destruct (Rdec a0 m). apply set_add_not_empty in mltmt. inversion mltmt.
-  exact mltmt.
-  exists m.
-  simpl.
-  destruct (Rdec a m). contradiction.
-  exact mltmt. inversion nodup; auto.
+  induction s as [| x1 s'].
+  Case "s = []".
+    assert False as F. apply notempty. reflexivity. inversion F.
+  Case "S =  a :: s".
+    destruct s' as [| x2 s''].
+    SCase "s' = []".
+      exists x1. simpl.
+      destruct (Rdec x1 x1).
+      assert False as F. eapply Rso. exact r. inversion F. reflexivity.
+    SCase "s' = x2 :: s''".
+      assert (x2 :: s'' <> []) as notmt.
+        intros contra. inversion contra.
+      apply IHs' in notmt.
+      destruct notmt as [m mltnil].
+      destruct (Rdec x1 m).
+      SSCase "R x1 m".
+        exists x1. simpl.
+        destruct (Rdec x1 x1).
+        apply Rso in r0. inversion r0.
+        destruct (Rdec x2 x1).
+        SSSCase "R x2 x1".
+          assert (set_In x2 (lt_set m (x2 :: s''))) as contra.
+          eapply lt_set_rel_equiv. left. reflexivity.
+          eapply Rso. exact r0. exact r.
+          rewrite mltnil in contra. inversion contra.
+          SSSCase "~R x2 x1".
+            remember (lt_set x1 s'') as x1lt.
+            destruct (x1lt).
+            SSSSCase "lt_set x1 s'' = []". reflexivity.
+            SSSSCase "x :: x1lt = lt_set x1 s''".
+              assert (set_In x (lt_set x1 s'')) as xInx1lt.
+              rewrite <- Heqx1lt. left. reflexivity.
+              assert (set_In x s'') as xcontraIn.
+              eapply in_lt_imp_in_set. exact xInx1lt.
+              assert (R x m) as Rxm.
+              eapply Rso. apply lt_set_rel_equiv in xInx1lt.
+              exact xInx1lt. exact xcontraIn. exact r.
+              assert (set_In x (lt_set m (x2 :: s''))) as contraInmlt.
+              apply lt_set_rel_equiv. right. exact xcontraIn. exact Rxm.
+              rewrite mltnil in contraInmlt. inversion contraInmlt.
+      SSCase "R x1 m".
+        exists m.
+        simpl. simpl in mltnil.
+        destruct (Rdec x2 m). apply set_add_not_empty in mltnil. inversion mltnil.
+        destruct (Rdec x1 m). contradiction. 
+        exact mltnil. inversion nodup; auto.
 Qed.
 
-Lemma minimal_finite_ensemble_mem : forall E n,
-cardinal X E (S n) ->
-exists min, forall y, InSet X E y -> ~R y min.
+Lemma minimal_finite_ensemble_mem : 
+  forall E n,
+    cardinal X E (S n) ->
+    exists min, forall y, InSet X E y -> ~R y min.
 Proof.
   intros E n card.
   assert (Finite X E) as finE.
-    eapply cardinal_finite. exact card.
+  eapply cardinal_finite. exact card.
   destruct (ensemble_imp_set E finE) as [s [allIn [nodup [i [slen scard]]]]].
   assert (s <> nil) as nonil.
-    intros contra. subst s. simpl in slen. subst i. inversion scard. subst E.
-    inversion card. symmetry in H. apply not_Empty_Add in H. inversion H.
+  intros contra. subst s. simpl in slen. subst i. inversion scard. subst E.
+  inversion card. symmetry in H. apply not_Empty_Add in H. inversion H.
   destruct (exists_empty_lt_set s nodup nonil) as [min ltnil].
   exists min.
   intros y yIn contraR.
