@@ -254,7 +254,7 @@ Proof.
     omega.
 Qed.
 
-Inductive Comm : Relation Node :=
+Inductive Comm : relation Node :=
 | comm :  forall n m t, ((Node_smsg n = tx t 
                                     /\ Node_smsg m = rx t)
                         /\ Node_strand n <> Node_strand m)
@@ -270,7 +270,7 @@ Hint Constructors Comm.
   same time". *)
 
 (* A CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive Comm' : NodeSet -> Relation Node :=
+Inductive Comm' : NodeSet -> relation Node :=
 | comm' : forall N x y,
               In Node N x ->
               In Node N y ->
@@ -286,6 +286,21 @@ Proof.
 Qed.
 Hint Resolve comm'_imp_comm.
 
+Lemma comm'_imp_in_l : forall N x y,
+Comm' N x y -> In Node N x.
+Proof.
+  intros N x y comm.
+  inversion comm; subst.
+  exact H.
+Qed.
+
+Lemma comm'_imp_in_r : forall N x y,
+Comm' N x y -> In Node N y.
+Proof.
+  intros N x y comm.
+  inversion comm; subst.
+  exact H0.
+Qed.
 
 Theorem comm_irreflexivity : forall n,
 ~ Comm n n.
@@ -335,7 +350,7 @@ Hint Resolve comm'_antisymmetry.
 
 (* predecessor edge *)
 (* node's direct predecessor -> node -> Prop *)
-Inductive Pred : Relation Node :=
+Inductive Pred : relation Node :=
 | pred : forall i j, Node_strand i = Node_strand j 
                        -> (Node_index i) + 1 = Node_index j 
                        -> Pred i j.
@@ -344,13 +359,29 @@ Inductive Pred : Relation Node :=
     an edge n1 => n2." *)
 
 (* An CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive Pred' : NodeSet -> Relation Node :=
+Inductive Pred' : NodeSet -> relation Node :=
 | pedge' : forall N x y,
               In Node N x ->
               In Node N y ->
               Pred x y ->
               Pred' N x y.
 Hint Constructors Pred'.
+
+Lemma pred'_imp_in_l : forall N x y,
+Pred' N x y -> In Node N x.
+Proof.
+  intros N x y pred.
+  inversion pred; subst.
+  exact H.
+Qed.
+
+Lemma pred'_imp_in_r : forall N x y,
+Pred' N x y -> In Node N y.
+Proof.
+  intros N x y pred.
+  inversion pred; subst.
+  exact H0.
+Qed.
 
 Lemma pred'_imp_pred : forall N x y,
 Pred' N x y -> Pred x y.
@@ -398,7 +429,7 @@ Hint Resolve pred'_antisymmetry.
 
 (* predecessor multi edge (not nec. immediate predecessor) *)
 (* node's eventual predecessor -> node -> Prop *)
-Definition PredPath : Relation Node := 
+Definition PredPath : relation Node := 
 clos_trans Node Pred.
  (* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
@@ -406,8 +437,26 @@ clos_trans Node Pred.
 Hint Constructors clos_trans.
 
 (* An PredPath between nodes, where the set the nodes belong to is specified. *)
-Definition PredPath' (N: NodeSet) : Relation Node :=
+Definition PredPath' (N: NodeSet) : relation Node :=
 clos_trans Node (Pred' N).
+
+Lemma ppath'_imp_in_l : forall N x y,
+PredPath' N x y -> In Node N x.
+Proof.
+  intros N x y ppath.
+  induction ppath.
+  eapply pred'_imp_in_l. exact H.
+  exact IHppath1.
+Qed.
+
+Lemma ppath'_imp_in_r : forall N x y,
+PredPath' N x y -> In Node N y.
+Proof.
+  intros N x y ppath.
+  induction ppath.
+  eapply pred'_imp_in_r. exact H.
+  exact IHppath2.
+Qed.
 
 Lemma ppath'_imp_ppath : forall N x y,
 PredPath' N x y -> PredPath x y.
@@ -419,6 +468,68 @@ Proof.
   apply (t_trans Node Pred x y z IHedge'1 IHedge'2).
 Qed.
 Hint Resolve ppath'_imp_ppath.
+
+Lemma ppath_imp_eq_strand : forall x y,
+PredPath x y -> Node_strand x = Node_strand y.
+Proof.
+  intros x y path.
+  induction path.
+  Case "step".
+    destruct H; auto.
+  Case "trans".
+    rewrite IHpath1.
+    rewrite IHpath2.
+    reflexivity.
+Qed.
+Hint Resolve ppath_imp_eq_strand.
+
+
+Lemma ppath'_imp_eq_strand : forall N x y,
+PredPath' N x y -> Node_strand x = Node_strand y.
+Proof.
+  intros N x y ppath.
+  apply ppath'_imp_ppath in ppath.
+  apply ppath_imp_eq_strand in ppath. exact ppath.
+Qed.
+Hint Resolve ppath'_imp_eq_strand.
+
+Lemma ppath_imp_index_lt : forall x y,
+PredPath x y -> Node_index x < Node_index y.
+Proof.
+  intros x y path.
+  induction path.
+  Case "step". inversion H; subst. omega.
+  Case "trans". omega.
+Qed.
+Hint Resolve ppath_imp_index_lt.
+
+Lemma ppath'_imp_index_lt : forall N x y,
+PredPath' N x y -> Node_index x < Node_index y.
+Proof.
+  intros N x y ppath.
+  apply ppath'_imp_ppath in ppath.
+  apply ppath_imp_index_lt in ppath. exact ppath.
+Qed.
+Hint Resolve ppath'_imp_index_lt.
+
+Lemma ppath_irreflexivity : forall n,
+~PredPath n n.
+Proof.
+  intros n contra.
+  apply ppath_imp_index_lt in contra.
+  omega.
+Qed.
+Hint Resolve ppath_irreflexivity.
+
+Lemma ppath'_irreflexivity : forall N n,
+~PredPath' N n n.
+Proof.
+  intros N n contra.
+  apply ppath'_imp_ppath in contra.
+  apply ppath_irreflexivity in contra.
+  exact contra.
+Qed.
+Hint Resolve ppath'_irreflexivity.
 
 Theorem ppath_transitivity :
 Transitive Node PredPath.
@@ -436,12 +547,30 @@ Proof.
 Qed.
 Hint Resolve ppath'_transitivity.
 
-Definition SSEdge : Relation Node :=
+Definition SSEdge : relation Node :=
 union Node Comm Pred.
 Hint Constructors or.
 
-Definition SSEdge' (N:NodeSet) : Relation Node :=
+Definition SSEdge' (N:NodeSet) : relation Node :=
 union Node (Comm' N) (Pred' N).
+
+Lemma ssedge'_imp_in_l : forall N x y,
+SSEdge' N x y -> In Node N x.
+Proof.
+  intros N x y ssedge'.
+  destruct ssedge'.
+  eapply comm'_imp_in_l. exact H.
+  eapply pred'_imp_in_l. exact H.
+Qed.
+
+Lemma ssedge'_imp_in_r : forall N x y,
+SSEdge' N x y -> In Node N y.
+Proof.
+  intros N x y ssedge'.
+  destruct ssedge'.
+  eapply comm'_imp_in_r. exact H.
+  eapply pred'_imp_in_r. exact H.
+Qed.
 
 Lemma ssedge'_imp_ssedge : forall N x y,
 SSEdge' N x y -> SSEdge x y.
@@ -501,3 +630,239 @@ Proof.
   apply (ssedge'_imp_ssedge N). exact Hcontra.
 Qed.
 Hint Resolve ssedge'_antisymmetry.
+
+(* transitive closure of edges. *)
+Definition SSPath : relation Node := 
+clos_trans Node SSEdge.
+
+Definition SSPath' (N: NodeSet) : relation Node := 
+clos_trans Node (SSEdge' N).
+
+
+Lemma sspath'_imp_in_l : forall N x y,
+SSPath' N x y -> In Node N x.
+Proof.
+  intros N x y sspath'.
+  induction  sspath'.
+  destruct H.
+  destruct H. exact H.
+  destruct H. exact H.
+  exact IHsspath'1. 
+Qed.
+
+Lemma sspath'_imp_in_r : forall N x y,
+SSPath' N x y -> In Node N y.
+Proof.
+  intros N n m sspath'.
+  induction  sspath'.
+  destruct H.
+  destruct H. exact H0.
+  destruct H. exact H0.
+  exact IHsspath'2. 
+Qed.
+
+Lemma sspath'_imp_sspath : forall N x y,
+SSPath' N x y -> SSPath x y.
+Proof.
+  intros N x y edge'.
+  induction edge'.
+  constructor.
+  apply (ssedge'_imp_ssedge _ _ _ H).
+  apply (t_trans Node SSEdge x y z IHedge'1 IHedge'2).
+Qed.
+
+Theorem ppath_imp_sspath : forall i j,
+PredPath i j -> SSPath i j.
+Proof.
+  unfold SSPath.
+  intros i j Hpath.
+  induction Hpath.
+  constructor. right. exact H.
+  apply (t_trans Node SSEdge x y z IHHpath1 IHHpath2).
+Qed.  
+
+Theorem ppath'_imp_sspath' : forall N i j,
+PredPath' N i j -> SSPath' N i j.
+Proof.
+  intros N i j Hpath.
+  induction Hpath.
+  constructor. right. exact H.
+  apply (t_trans Node (SSEdge' N) x y z IHHpath1 IHHpath2).
+Qed.  
+
+Theorem sspath_transitivity :
+Transitive Node SSPath.
+Proof.
+  unfold SSPath.
+  intros i j k Hij Hjk.
+  apply (t_trans Node SSEdge i j k Hij Hjk).
+Qed.
+
+(* transitive reflexive closure of edges. *)
+Definition SSPathEq : relation Node :=
+clos_refl_trans Node SSEdge.
+Hint Constructors clos_refl_trans.
+
+Inductive SSEq' (N:NodeSet) : relation Node :=
+| sseq'_refl : forall x, In Node N x -> SSEq' N x x.
+
+Definition SSPathEq' (N:NodeSet) : relation Node :=
+union Node (SSEq' N) (clos_trans Node (SSEdge' N)).
+
+Lemma sspatheq'_imp_sspatheq : forall N x y,
+SSPathEq' N x y -> SSPathEq x y.
+Proof.
+  intros N x y edge'.
+  induction edge'.
+  constructor.
+  apply (ssedge'_imp_ssedge _ _ _ H).
+  apply rt_refl.
+  eapply rt_trans. exact IHedge'1. exact IHedge'2.
+Qed.
+
+Theorem sspatheq'_imp_in_l : forall N x y,
+SSPathEq' N x y -> In Node N x.
+Proof.
+  intros N x y sspath'.
+  induction sspath'.
+  apply (ssedge'_imp_in_l N x y). exact H.
+Qed.
+
+Theorem sspatheq'_imp_in_r : forall N x y,
+SSPathEq' N x y -> In Node N y.
+Proof.
+  intros N x y epath'.
+  induction  epath'.
+  exact H. apply (sspath'_imp_in_r N x y). exact H.
+Qed.
+
+Theorem epatheq_opts: forall n m,
+EdgePathEq n m -> EdgePath n m \/ n = m.
+Proof.
+  intros n m Hpatheq.
+  induction Hpatheq.
+  right. reflexivity.
+  left. exact H.
+Qed.
+
+Theorem epatheq'_opts: forall N n m,
+EdgePathEq' N n m -> EdgePath' N n m \/ n = m.
+Proof.
+  intros N n m Hpatheq.
+  induction Hpatheq.
+  right. reflexivity.
+  left. exact H.
+Qed.
+
+
+Theorem epatheq_transitivity :
+Transitive Node EdgePathEq.
+Proof.
+  unfold Transitive.
+  intros i j k Hij Hjk.
+  destruct Hij. exact Hjk.
+  destruct Hjk. constructor. exact H.
+  constructor.
+  apply (t_trans Node SSEdge x x0 y H H0).
+Qed.
+
+Theorem epatheq'_transitivity : forall (N : Nodes),
+Transitive Node (EdgePathEq' N).
+Proof.
+  intros N i j k Hij Hjk.
+  destruct Hij. exact Hjk.
+  destruct Hjk. constructor. exact H.
+  constructor.
+  apply (t_trans Node (SSEdge' N) x x0 y H H0).
+Qed.
+
+
+
+Inductive OccursIn : Msg -> Node -> Prop :=
+| occurs_in : forall m n, Subterm m (Node_msg n) -> OccursIn m n.
+(* [REF 1] Definition 2.3.5 pg  6
+   "An unsigned term m occurs in a node n iff m is a subterm of term(n). " *)
+
+(* signifies the origin of a msg. *)
+Inductive EntryPoint : Node -> MsgSet -> Prop :=
+| entrypoint :  forall n I, 
+                  ((exists m, ((Node_smsg n = tx m) 
+                               /\ (In Msg I m)))
+                   /\ (forall n', (PredPath n' n) 
+                                  -> ~(In Msg I (Node_msg n'))))
+                  -> EntryPoint n I.
+(* [REF 1] Definition 2.3.6 pg 6
+   "The node n in N is an entry point for I (a set of unsigned terms) iff
+    term(n) = +t for some t in I, and whenever n' =>+ n term(n') is not in I."*)
+
+(* where an unsigned term originates, what node *)
+Inductive OriginateAt : Msg -> Node -> Prop :=
+| orig_at : forall m n, 
+              (exists I, ((EntryPoint n I)
+                          /\ (forall m', In Msg I m -> Subterm m m')))
+              -> OriginateAt m n.
+(* [REF 1] Definition 2.3.7 pg 6
+   "An unsigned term t originates on n in N iff n is an entry point for 
+    the set I = {t' | t is a subterm of t'}."*)
+
+(* uniquely originating term def, useful for nonces or session keys *)
+Inductive UniqOrigin : Msg -> Prop :=
+| uniq_orig : forall t, (exists n, 
+                           (forall n', OriginateAt t n' -> n = n') )
+                        -> UniqOrigin t.
+(* [REF 1] Definition 2.3.8 pg 7 
+   "unsigned term t is uniquely originating iff t originates on a unique
+    n in N." *)
+
+
+Definition Acyclic_Node (n : Node): Prop :=
+~(EdgePath n n).
+
+Definition Acyclic_Nodes (N : Nodes) : Prop :=
+forall n, In Node N n -> Acyclic_Node n.
+
+Theorem acyc_ppath_asymmetry : forall n m,
+Acyclic_Node n ->
+PredPath n m -> ~(PredPath m n).
+Proof.
+  intros n m Hacycn Hpp contra.
+  apply Hacycn.
+  remember (ppath_transitivity n m n Hpp contra).
+  apply ppath_imp_epath. exact p.
+Qed.
+
+Theorem acyc_ppath'_asymmetry : forall N n m,
+Acyclic_Node n ->
+PredPath' N n m -> ~(PredPath' N m n).
+Proof.
+  intros N n m Hacycn Hpp contra.
+  apply Hacycn.
+  apply ppath_imp_epath.
+  apply (ppath_transitivity n m n).
+  apply (ppath'_imp_ppath N).
+  exact Hpp. apply (ppath'_imp_ppath N).
+  exact contra.
+Qed.
+
+Theorem acyc_epath_imp_neq : forall n m,
+Acyclic_Node m ->
+EdgePath n m -> n <> m.
+Proof.
+  intros n m Hacyc Hpath.
+  induction Hpath.
+  apply ssedge_imp_neq. exact H.
+  intros contra.
+  remember (t_trans Node SSEdge x y z Hpath1 Hpath2).
+  apply Hacyc.
+  subst x. exact c.
+Qed.
+
+Theorem acyc_epath'_imp_neq : forall N n m,
+Acyclic_Node m ->
+EdgePath' N n m -> n <> m.
+Proof.
+  intros N n m Hacyc Hpath.
+  apply acyc_epath_imp_neq.
+  exact Hacyc. apply (epath'_imp_epath N).
+  exact Hpath.
+Qed.
