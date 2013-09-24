@@ -714,10 +714,11 @@ SSPathEq' N x y -> SSPathEq x y.
 Proof.
   intros N x y edge'.
   induction edge'.
-  constructor.
-  apply (ssedge'_imp_ssedge _ _ _ H).
+  destruct H.
   apply rt_refl.
-  eapply rt_trans. exact IHedge'1. exact IHedge'2.
+  induction H.
+    apply rt_step. eapply ssedge'_imp_ssedge. exact H.
+    eapply rt_trans. exact IHclos_trans1. exact IHclos_trans2.
 Qed.
 
 Theorem sspatheq'_imp_in_l : forall N x y,
@@ -725,144 +726,129 @@ SSPathEq' N x y -> In Node N x.
 Proof.
   intros N x y sspath'.
   induction sspath'.
-  apply (ssedge'_imp_in_l N x y). exact H.
+    destruct H; auto.
+    apply (sspath'_imp_in_l N x y). exact H.
 Qed.
 
 Theorem sspatheq'_imp_in_r : forall N x y,
 SSPathEq' N x y -> In Node N y.
 Proof.
-  intros N x y epath'.
-  induction  epath'.
-  exact H. apply (sspath'_imp_in_r N x y). exact H.
+  intros N x y sspath'.
+  induction sspath'.
+    destruct H; auto.
+    apply (sspath'_imp_in_r N x y). exact H.
 Qed.
 
-Theorem epatheq_opts: forall n m,
-EdgePathEq n m -> EdgePath n m \/ n = m.
+Theorem sspatheq_opts: forall n m,
+SSPathEq n m -> SSPath n m \/ n = m.
 Proof.
   intros n m Hpatheq.
   induction Hpatheq.
+  left. apply t_step. exact H.
   right. reflexivity.
-  left. exact H.
+  destruct IHHpatheq1 as [pathxy | eqxy].
+    destruct IHHpatheq2 as [pathyz | eqyz].
+      left. eapply t_trans. exact pathxy. exact pathyz.
+      subst y. left. exact pathxy.
+    destruct IHHpatheq2 as [pathyz | eqyz].
+      subst x. left. exact pathyz.
+      right. subst. reflexivity.
 Qed.
 
-Theorem epatheq'_opts: forall N n m,
-EdgePathEq' N n m -> EdgePath' N n m \/ n = m.
+Theorem sspatheq'_opts: forall N n m,
+SSPathEq' N n m -> SSPath' N n m \/ n = m.
 Proof.
   intros N n m Hpatheq.
   induction Hpatheq.
-  right. reflexivity.
+  right. destruct H. reflexivity.
   left. exact H.
 Qed.
 
+Theorem sspath'_transitivity : forall (N : NodeSet),
+Transitive Node (SSPath' N).
+Proof.
+  intros N i j k Hij Hjk.
+  destruct Hij.
+  eapply t_trans. apply t_step. exact H.
+  exact Hjk.
+  eapply t_trans. exact Hij1. eapply t_trans. exact Hij2.
+  exact Hjk.
+Qed.
 
-Theorem epatheq_transitivity :
-Transitive Node EdgePathEq.
+Theorem sspatheq_transitivity :
+Transitive Node SSPathEq.
 Proof.
   unfold Transitive.
   intros i j k Hij Hjk.
-  destruct Hij. exact Hjk.
-  destruct Hjk. constructor. exact H.
-  constructor.
-  apply (t_trans Node SSEdge x x0 y H H0).
+  destruct Hij. 
+    eapply rt_trans. eapply rt_step. exact H. 
+    exact Hjk. exact Hjk. 
+    eapply rt_trans. exact Hij1. eapply rt_trans.
+    exact Hij2. exact Hjk.
 Qed.
 
-Theorem epatheq'_transitivity : forall (N : Nodes),
-Transitive Node (EdgePathEq' N).
+Theorem sspatheq'_transitivity : forall (N : NodeSet),
+Transitive Node (SSPathEq' N).
 Proof.
   intros N i j k Hij Hjk.
-  destruct Hij. exact Hjk.
-  destruct Hjk. constructor. exact H.
-  constructor.
-  apply (t_trans Node (SSEdge' N) x x0 y H H0).
+  destruct Hij.
+    destruct H. exact Hjk. 
+    destruct Hjk. destruct H0.
+    right. exact H. 
+    right. eapply t_trans. exact H.
+    exact H0.
 Qed.
 
+(* In for members of pairs *)
+Inductive InPair {X:Type} : Ensemble (X*X) -> X -> Prop :=
+| inp_l : forall E x,
+            (exists y, In (X*X) E (x,y))
+            -> InPair E x
+| inp_r : forall E x,
+            (exists y, In (X*X) E (y,x))
+            -> InPair E x.
+Hint Constructors InPair.
 
+Inductive ValidEdges : NodeSet -> EdgeSet -> Prop :=
+| validedges : forall N E,
+                 (* All Nodes are in an Edge *)
+                 (forall x, In Node N x -> InPair E x)
+                 (* All Nodes in an Edge are in the Node set *)
+                 /\ (forall x, InPair E x -> In Node N x)
+                 (* All edges represent an (SSEdgeEq' N) relation *)
+                 /\ (forall x y, In Edge E (x,y) -> SSPathEq' N x y) ->
+                 ValidEdges N E.
 
-Inductive OccursIn : Msg -> Node -> Prop :=
-| occurs_in : forall m n, Subterm m (Node_msg n) -> OccursIn m n.
-(* [REF 1] Definition 2.3.5 pg  6
-   "An unsigned term m occurs in a node n iff m is a subterm of term(n). " *)
+(* An rx implies the existance of a tx *)
+Definition TxExists (N:NodeSet) (E:EdgeSet) :=
+  (forall y m, Node_smsg y = rx m -> 
+               In Node N y ->  
+               (exists x, (In Node N x
+                           /\ Node_smsg x = tx m
+                           /\ Comm x y
+                           /\ In Edge E (x,y)))).
 
-(* signifies the origin of a msg. *)
-Inductive EntryPoint : Node -> MsgSet -> Prop :=
-| entrypoint :  forall n I, 
-                  ((exists m, ((Node_smsg n = tx m) 
-                               /\ (In Msg I m)))
-                   /\ (forall n', (PredPath n' n) 
-                                  -> ~(In Msg I (Node_msg n'))))
-                  -> EntryPoint n I.
-(* [REF 1] Definition 2.3.6 pg 6
-   "The node n in N is an entry point for I (a set of unsigned terms) iff
-    term(n) = +t for some t in I, and whenever n' =>+ n term(n') is not in I."*)
+(* A node can rx a msg from only one tx at a time *)
+Definition UniqTx (N:NodeSet) :=
+  (forall x y z, In Node N x ->
+                 In Node N y ->
+                 In Node N z ->
+                 Comm x z ->
+                 Comm y z ->
+                 x = y).
 
-(* where an unsigned term originates, what node *)
-Inductive OriginateAt : Msg -> Node -> Prop :=
-| orig_at : forall m n, 
-              (exists I, ((EntryPoint n I)
-                          /\ (forall m', In Msg I m -> Subterm m m')))
-              -> OriginateAt m n.
-(* [REF 1] Definition 2.3.7 pg 6
-   "An unsigned term t originates on n in N iff n is an entry point for 
-    the set I = {t' | t is a subterm of t'}."*)
+Definition UniqueTxInSet (N:NodeSet) (E:EdgeSet) : Prop :=
+UniqTx N /\ TxExists N E.
 
-(* uniquely originating term def, useful for nonces or session keys *)
-Inductive UniqOrigin : Msg -> Prop :=
-| uniq_orig : forall t, (exists n, 
-                           (forall n', OriginateAt t n' -> n = n') )
-                        -> UniqOrigin t.
-(* [REF 1] Definition 2.3.8 pg 7 
-   "unsigned term t is uniquely originating iff t originates on a unique
-    n in N." *)
+Definition Acyclic (N:NodeSet) (E:EdgeSet) : Prop :=
+forall x, ~ In Edge E (x,x).
 
-
-Definition Acyclic_Node (n : Node): Prop :=
-~(EdgePath n n).
-
-Definition Acyclic_Nodes (N : Nodes) : Prop :=
-forall n, In Node N n -> Acyclic_Node n.
-
-Theorem acyc_ppath_asymmetry : forall n m,
-Acyclic_Node n ->
-PredPath n m -> ~(PredPath m n).
-Proof.
-  intros n m Hacycn Hpp contra.
-  apply Hacycn.
-  remember (ppath_transitivity n m n Hpp contra).
-  apply ppath_imp_epath. exact p.
-Qed.
-
-Theorem acyc_ppath'_asymmetry : forall N n m,
-Acyclic_Node n ->
-PredPath' N n m -> ~(PredPath' N m n).
-Proof.
-  intros N n m Hacycn Hpp contra.
-  apply Hacycn.
-  apply ppath_imp_epath.
-  apply (ppath_transitivity n m n).
-  apply (ppath'_imp_ppath N).
-  exact Hpp. apply (ppath'_imp_ppath N).
-  exact contra.
-Qed.
-
-Theorem acyc_epath_imp_neq : forall n m,
-Acyclic_Node m ->
-EdgePath n m -> n <> m.
-Proof.
-  intros n m Hacyc Hpath.
-  induction Hpath.
-  apply ssedge_imp_neq. exact H.
-  intros contra.
-  remember (t_trans Node SSEdge x y z Hpath1 Hpath2).
-  apply Hacyc.
-  subst x. exact c.
-Qed.
-
-Theorem acyc_epath'_imp_neq : forall N n m,
-Acyclic_Node m ->
-EdgePath' N n m -> n <> m.
-Proof.
-  intros N n m Hacyc Hpath.
-  apply acyc_epath_imp_neq.
-  exact Hacyc. apply (epath'_imp_epath N).
-  exact Hpath.
-Qed.
+Inductive Bundle : NodeSet -> EdgeSet -> Prop :=
+| bundle : forall N E,
+             Finite Node N ->
+             Finite Edge E ->
+             ValidEdges N E ->
+             UniqueTxInSet N E ->
+             Acyclic N E ->
+             Bundle N E.
+(* TODO - check Bundle def for correctness *)             
