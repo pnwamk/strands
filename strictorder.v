@@ -1,30 +1,4 @@
-Require String. Open Scope string_scope.
-Require Import Relations Omega NPeano Ensembles Finite_sets Finite_sets_facts List ListSet.
-(* Case for clearer analysis *)
-Ltac move_to_top x :=
-  match reverse goal with
-  | H : _ |- _ => try move x after H
-  end.
-
-Tactic Notation "assert_eq" ident(x) constr(v) :=
-  let H := fresh in
-  assert (x = v) as H by reflexivity;
-  clear H.
-
-Tactic Notation "Case_aux" ident(x) constr(name) :=
-  first [
-    set (x := name); move_to_top x
-  | assert_eq x name; move_to_top x
-  | fail 1 "because we are working on a different case" ].
-
-Tactic Notation "Case" constr(name) := Case_aux Case name.
-Tactic Notation "SCase" constr(name) := Case_aux SCase name.
-Tactic Notation "SSCase" constr(name) := Case_aux SSCase name.
-Tactic Notation "SSSCase" constr(name) := Case_aux SSSCase name.
-Tactic Notation "SSSSCase" constr(name) := Case_aux SSSSCase name.
-Tactic Notation "SSSSSCase" constr(name) := Case_aux SSSSSCase name.
-Tactic Notation "SSSSSSCase" constr(name) := Case_aux SSSSSSCase name.
-Tactic Notation "SSSSSSSCase" constr(name) := Case_aux SSSSSSSCase name.
+Require Import Relations Omega Ensembles Finite_sets Finite_sets_facts List ListSet util.
 
 Require Import ListSet List Relations_1.
 
@@ -150,8 +124,6 @@ Proof.
     intros contra2. subst. inversion nodup. apply H5. simpl. left. reflexivity.
     apply IHs. exact xsnodup.
 Qed.
-
-
 
 Lemma ensemble_imp_set : forall (E: Ensemble X),
 Finite X E ->
@@ -616,7 +588,7 @@ Qed.
 Lemma exists_empty_lt_set : forall s,
 NoDup s ->
 s <> nil ->
-exists x, lt_set x s = nil.
+exists x, set_In x s /\ lt_set x s = nil.
 Proof.
   intros s nodup notempty.
   induction s as [| x1 s'].
@@ -627,7 +599,8 @@ Proof.
     SCase "s' = []".
       exists x1. simpl.
       destruct (Rdec x1 x1).
-      assert False as F. eapply Rso. exact r. inversion F. reflexivity.
+      assert False as F. eapply Rso. exact r. inversion F. 
+      split. left. reflexivity. reflexivity.
     SCase "s' = x2 :: s''".
       assert (x2 :: s'' <> []) as notmt.
         intros contra. inversion contra.
@@ -643,11 +616,13 @@ Proof.
           assert (set_In x2 (lt_set m (x2 :: s''))) as contra.
           eapply lt_set_rel_equiv. left. reflexivity.
           eapply Rso. exact r0. exact r.
+          split. left. reflexivity.
+          destruct mltnil as [mltnilIn mltnil].
           rewrite mltnil in contra. inversion contra.
           SSSCase "~R x2 x1".
             remember (lt_set x1 s'') as x1lt.
             destruct (x1lt).
-            SSSSCase "lt_set x1 s'' = []". reflexivity.
+            SSSSCase "lt_set x1 s'' = []". split. left. reflexivity. reflexivity.
             SSSSCase "x :: x1lt = lt_set x1 s''".
               assert (set_In x (lt_set x1 s'')) as xInx1lt.
               rewrite <- Heqx1lt. left. reflexivity.
@@ -658,19 +633,25 @@ Proof.
               exact xInx1lt. exact xcontraIn. exact r.
               assert (set_In x (lt_set m (x2 :: s''))) as contraInmlt.
               apply lt_set_rel_equiv. right. exact xcontraIn. exact Rxm.
+              split. left. reflexivity.
+              destruct mltnil as [mltnilIn mltnil].
               rewrite mltnil in contraInmlt. inversion contraInmlt.
       SSCase "R x1 m".
         exists m.
-        simpl. simpl in mltnil.
-        destruct (Rdec x2 m). apply set_add_not_empty in mltnil. inversion mltnil.
-        destruct (Rdec x1 m). contradiction. 
-        exact mltnil. inversion nodup; auto.
+        split.
+        destruct mltnil as [mltnilIn mltnil].
+        right. exact mltnilIn.
+        destruct mltnil as [mltnilIn mltnil].
+        simpl. destruct (Rdec x1 m). contradiction. 
+        exact mltnil.
+        inversion nodup; auto.
 Qed.
 
 Lemma minimal_finite_ensemble_mem : 
   forall E n,
     cardinal X E (S n) ->
-    exists min, forall y, InSet X E y -> ~R y min.
+    exists min, InSet X E min /\ 
+                forall y, InSet X E y -> ~R y min.
 Proof.
   intros E n card.
   assert (Finite X E) as finE.
@@ -679,8 +660,9 @@ Proof.
   assert (s <> nil) as nonil.
   intros contra. subst s. simpl in slen. subst i. inversion scard. subst E.
   inversion card. symmetry in H. apply not_Empty_Add in H. inversion H.
-  destruct (exists_empty_lt_set s nodup nonil) as [min ltnil].
+  destruct (exists_empty_lt_set s nodup nonil) as [min [minIn ltnil]].
   exists min.
+  split. apply allIn. exact minIn.
   intros y yIn contraR.
   assert (set_In y s) as yIns. apply allIn. exact yIn.
   apply (lt_set_rel_equiv min y s yIns) in contraR.

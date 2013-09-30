@@ -269,37 +269,42 @@ Hint Constructors Comm.
   may send or receive a message but not both at the 
   same time". *)
 
-(* A CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive Comm' : NodeSet -> relation Node :=
-| comm' : forall N x y,
-              In Node N x ->
-              In Node N y ->
-              Comm x y ->
-              Comm' N x y.
-Hint Constructors Comm'.
-
-Lemma comm'_imp_comm : forall N x y,
-Comm' N x y -> Comm x y.
+Lemma comm_dec : forall x y,
+{Comm x y} + {~ Comm x y}.
 Proof.
-  intros N x y edge'.
-  destruct edge'. exact H1.
-Qed.
-Hint Resolve comm'_imp_comm.
-
-Lemma comm'_imp_in_l : forall N x y,
-Comm' N x y -> In Node N x.
-Proof.
-  intros N x y comm.
-  inversion comm; subst.
-  exact H.
-Qed.
-
-Lemma comm'_imp_in_r : forall N x y,
-Comm' N x y -> In Node N y.
-Proof.
-  intros N x y comm.
-  inversion comm; subst.
-  exact H0.
+  intros x y.
+  remember (Node_smsg x) as xsmsg. remember (Node_smsg y) as ysmsg.
+  remember (Node_strand x) as xstrand. remember (Node_strand y) as ystrand.
+  destruct xsmsg.
+  Case "x (tx m)".
+    destruct ysmsg.
+    SCase "y (tx m0)".
+      right. intros contracomm. inversion contracomm; subst.
+      destruct H as [[xtx yrx] strandneq].
+      rewrite <- Heqysmsg in yrx. inversion yrx.      
+    SCase "y (rx m0)".
+      destruct (eq_msg_dec m m0) as [msgeq | msgneq].
+      SSCase "m = m0".
+        destruct (eq_strand_dec xstrand ystrand) as [strandeq | strandneq].
+        SSSCase "strands eq".
+          right. intros contracomm.
+          inversion contracomm; subst. destruct H as [msgs strandsneq].
+          apply strandsneq. exact strandeq. 
+        SSSCase "strands neq".
+          subst m0. left.
+          apply (comm x y m). split. split.
+          auto. auto. subst. exact strandneq.        
+      SSCase "m <> m0".
+        right. intros contracomm. inversion contracomm; subst. 
+        destruct H as [[xtx yrx] strandneq].
+        apply msgneq. rewrite <- Heqxsmsg in xtx.
+        rewrite <- Heqysmsg in yrx. inversion xtx; subst. 
+        inversion yrx; subst. reflexivity.
+  Case "x (rx m)".
+    right.
+    intros contracomm. inversion contracomm; subst.
+    destruct H as [[xtx yrx] strandneq].
+    rewrite <- Heqxsmsg in xtx. inversion xtx.
 Qed.
 
 Theorem comm_irreflexivity : forall n,
@@ -311,16 +316,6 @@ Proof.
   apply strandneq. reflexivity.
 Qed.
 Hint Resolve comm_irreflexivity.
-
-Theorem comm'_irreflexivity : forall N n,
-~ Comm' N n n.
-Proof.
-  intros N n contra.
-  apply comm'_imp_comm in contra.
-  eapply comm_irreflexivity.
-  exact contra.
-Qed.
-Hint Resolve comm'_irreflexivity.
 
 Theorem comm_antisymmetry : 
 Antisymmetric Node Comm.
@@ -338,16 +333,6 @@ Proof.
 Qed.
 Hint Resolve comm_antisymmetry.
 
-Theorem comm'_antisymmetry : forall N,
- Antisymmetric Node (Comm' N).
- Proof.
-  intros N n m Hcomm contra.
-  apply comm_antisymmetry.
-  apply (comm'_imp_comm N). exact Hcomm.
-  apply (comm'_imp_comm N). exact contra.
-Qed.
-Hint Resolve comm'_antisymmetry.
-
 (* predecessor edge *)
 (* node's direct predecessor -> node -> Prop *)
 Inductive Pred : relation Node :=
@@ -358,38 +343,22 @@ Inductive Pred : relation Node :=
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
-(* An CommEdge between nodes, where the set the nodes belong to is specified. *)
-Inductive Pred' : NodeSet -> relation Node :=
-| pedge' : forall N x y,
-              In Node N x ->
-              In Node N y ->
-              Pred x y ->
-              Pred' N x y.
-Hint Constructors Pred'.
-
-Lemma pred'_imp_in_l : forall N x y,
-Pred' N x y -> In Node N x.
+Lemma pred_dec : forall x y,
+{Pred x y} + {~Pred x y}.
 Proof.
-  intros N x y pred.
-  inversion pred; subst.
-  exact H.
-Qed.
-
-Lemma pred'_imp_in_r : forall N x y,
-Pred' N x y -> In Node N y.
-Proof.
-  intros N x y pred.
-  inversion pred; subst.
-  exact H0.
-Qed.
-
-Lemma pred'_imp_pred : forall N x y,
-Pred' N x y -> Pred x y.
-Proof.
-  intros N x y edge'.
-  destruct edge'. exact H1.
-Qed.
-Hint Resolve pred'_imp_pred.
+  intros x y.
+  remember (Node_index x) as xi. remember (Node_index y) as yi.
+  remember (Node_strand x) as xstrand. remember (Node_strand y) as ystrand.
+  destruct (eq_strand_dec xstrand ystrand) as [seq | sneq].
+  Case "strands eq".
+    destruct (eq_nat_dec yi (S xi)) as [predi | wrongi].
+    SCase "yi = S xi". left. apply (pred x y). rewrite <- Heqxstrand.
+      rewrite <- Heqystrand.  exact seq. omega.
+    SCase "yi <> S xi".
+      right. intros contrapred. apply wrongi. inversion contrapred; subst; omega.
+  Case "strands neq".
+    right. intros contrapred. apply sneq. inversion contrapred; subst; auto.
+Qed.  
 
 Theorem pred_irreflexivity : forall n,
 ~Pred n n.
@@ -398,15 +367,6 @@ Proof.
   inversion edge; subst. omega.
 Qed.
 Hint Resolve pred_irreflexivity.
-
-Theorem pred'_irreflexivity : forall N n,
-~ Pred' N n n.
-Proof.
-  intros N n edge.
-  eapply pred_irreflexivity.
-  eapply pred'_imp_pred. exact edge.
-Qed.
-Hint Resolve pred'_irreflexivity.
 
 Theorem pred_antisymmetry :
 Antisymmetric Node Pred.
@@ -417,16 +377,6 @@ Proof.
 Qed.
 Hint Resolve pred_antisymmetry.
 
-Theorem pred'_antisymmetry : forall N,
-Antisymmetric Node (Pred' N).
-Proof.
-  intros N n m Hpe1 Hpe2.
-  apply pred'_imp_pred in Hpe1.
-  apply pred'_imp_pred in Hpe2.
-  apply pred_antisymmetry; auto.
-Qed.
-Hint Resolve pred'_antisymmetry.
-
 (* predecessor multi edge (not nec. immediate predecessor) *)
 (* node's eventual predecessor -> node -> Prop *)
 Definition PredPath : relation Node := 
@@ -435,39 +385,6 @@ clos_trans Node Pred.
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
 Hint Constructors clos_trans.
-
-(* An PredPath between nodes, where the set the nodes belong to is specified. *)
-Definition PredPath' (N: NodeSet) : relation Node :=
-clos_trans Node (Pred' N).
-
-Lemma ppath'_imp_in_l : forall N x y,
-PredPath' N x y -> In Node N x.
-Proof.
-  intros N x y ppath.
-  induction ppath.
-  eapply pred'_imp_in_l. exact H.
-  exact IHppath1.
-Qed.
-
-Lemma ppath'_imp_in_r : forall N x y,
-PredPath' N x y -> In Node N y.
-Proof.
-  intros N x y ppath.
-  induction ppath.
-  eapply pred'_imp_in_r. exact H.
-  exact IHppath2.
-Qed.
-
-Lemma ppath'_imp_ppath : forall N x y,
-PredPath' N x y -> PredPath x y.
-Proof.
-  intros N x y edge'.
-  induction edge'.
-  destruct H.
-  constructor. exact H1. 
-  apply (t_trans Node Pred x y z IHedge'1 IHedge'2).
-Qed.
-Hint Resolve ppath'_imp_ppath.
 
 Lemma ppath_imp_eq_strand : forall x y,
 PredPath x y -> Node_strand x = Node_strand y.
@@ -483,16 +400,6 @@ Proof.
 Qed.
 Hint Resolve ppath_imp_eq_strand.
 
-
-Lemma ppath'_imp_eq_strand : forall N x y,
-PredPath' N x y -> Node_strand x = Node_strand y.
-Proof.
-  intros N x y ppath.
-  apply ppath'_imp_ppath in ppath.
-  apply ppath_imp_eq_strand in ppath. exact ppath.
-Qed.
-Hint Resolve ppath'_imp_eq_strand.
-
 Lemma ppath_imp_index_lt : forall x y,
 PredPath x y -> Node_index x < Node_index y.
 Proof.
@@ -503,15 +410,6 @@ Proof.
 Qed.
 Hint Resolve ppath_imp_index_lt.
 
-Lemma ppath'_imp_index_lt : forall N x y,
-PredPath' N x y -> Node_index x < Node_index y.
-Proof.
-  intros N x y ppath.
-  apply ppath'_imp_ppath in ppath.
-  apply ppath_imp_index_lt in ppath. exact ppath.
-Qed.
-Hint Resolve ppath'_imp_index_lt.
-
 Lemma ppath_irreflexivity : forall n,
 ~PredPath n n.
 Proof.
@@ -521,16 +419,6 @@ Proof.
 Qed.
 Hint Resolve ppath_irreflexivity.
 
-Lemma ppath'_irreflexivity : forall N n,
-~PredPath' N n n.
-Proof.
-  intros N n contra.
-  apply ppath'_imp_ppath in contra.
-  apply ppath_irreflexivity in contra.
-  exact contra.
-Qed.
-Hint Resolve ppath'_irreflexivity.
-
 Theorem ppath_transitivity :
 Transitive Node PredPath.
 Proof.
@@ -539,48 +427,29 @@ Proof.
 Qed.
 Hint Resolve ppath_transitivity.
 
-Theorem ppath'_transitivity : forall N,
-Transitive Node (PredPath' N).
-Proof.
-  intros N i j k Hij Hjk.
-  apply (t_trans Node (Pred' N) i j k Hij Hjk).
-Qed.
-Hint Resolve ppath'_transitivity.
-
 Definition SSEdge : relation Node :=
 union Node Comm Pred.
 Hint Constructors or.
 
-Definition SSEdge' (N:NodeSet) : relation Node :=
-union Node (Comm' N) (Pred' N).
-
-Lemma ssedge'_imp_in_l : forall N x y,
-SSEdge' N x y -> In Node N x.
+Lemma ssedge_dec : forall x y,
+{SSEdge x y} + {~SSEdge x y}.
 Proof.
-  intros N x y ssedge'.
-  destruct ssedge'.
-  eapply comm'_imp_in_l. exact H.
-  eapply pred'_imp_in_l. exact H.
+  intros x y.
+  destruct (comm_dec x y) as [cxy | nocxy].
+  Case "Comm x y".
+    left. left. exact cxy.
+  Case "~Comm x y".
+    destruct (pred_dec x y) as [pxy | nopxy].
+    SCase "Pred x y".
+      left. right. exact pxy.
+    SCase "~Pred x y".
+      right. intros contrass.
+       destruct contrass.
+       SSCase "false Comm".
+         apply nocxy; exact H.
+       SSCase "false Pred".
+         apply nopxy; exact H.
 Qed.
-
-Lemma ssedge'_imp_in_r : forall N x y,
-SSEdge' N x y -> In Node N y.
-Proof.
-  intros N x y ssedge'.
-  destruct ssedge'.
-  eapply comm'_imp_in_r. exact H.
-  eapply pred'_imp_in_r. exact H.
-Qed.
-
-Lemma ssedge'_imp_ssedge : forall N x y,
-SSEdge' N x y -> SSEdge x y.
-Proof.
-  intros N x y edge'.
-  destruct edge'.
-  left. apply (comm'_imp_comm _ _ _ H).
-  right. apply (pred'_imp_pred _ _ _ H).
-Qed.
-Hint Resolve ssedge'_imp_ssedge.
 
 Theorem ssedge_irreflexivity : forall n,
 ~SSEdge n n.
@@ -591,16 +460,6 @@ Proof.
   eapply (pred_irreflexivity); eauto.
 Qed.
 Hint Resolve ssedge_irreflexivity.
-
-Theorem ssedge'_irreflexivity : forall N n,
-~SSEdge' N n n.
-Proof.
-  intros N n Hedge.
-  inversion Hedge; subst; auto.
-  eapply (comm_irreflexivity); eauto.
-  eapply (pred_irreflexivity); eauto.
-Qed.
-Hint Resolve ssedge'_irreflexivity.
 
 Theorem ssedge_antisymmetry :
 Antisymmetric Node SSEdge.
@@ -621,55 +480,26 @@ Proof.
 Qed.
 Hint Resolve ssedge_antisymmetry.
 
-Theorem ssedge'_antisymmetry : forall N,
-Antisymmetric Node (SSEdge' N).
-Proof.
-  intros N n m Hss Hcontra.
-  apply ssedge_antisymmetry.
-  apply (ssedge'_imp_ssedge N). exact Hss.
-  apply (ssedge'_imp_ssedge N). exact Hcontra.
-Qed.
-Hint Resolve ssedge'_antisymmetry.
-
 (* transitive closure of edges. *)
 Definition SSPath : relation Node := 
 clos_trans Node SSEdge.
 
-Definition SSPath' (N: NodeSet) : relation Node := 
-clos_trans Node (SSEdge' N).
-
-
-Lemma sspath'_imp_in_l : forall N x y,
-SSPath' N x y -> In Node N x.
+Lemma sspath_dec : forall x y,
+{SSPath x y} + {~SSPath x y}.
 Proof.
-  intros N x y sspath'.
-  induction  sspath'.
-  destruct H.
-  destruct H. exact H.
-  destruct H. exact H.
-  exact IHsspath'1. 
-Qed.
-
-Lemma sspath'_imp_in_r : forall N x y,
-SSPath' N x y -> In Node N y.
-Proof.
-  intros N n m sspath'.
-  induction  sspath'.
-  destruct H.
-  destruct H. exact H0.
-  destruct H. exact H0.
-  exact IHsspath'2. 
-Qed.
-
-Lemma sspath'_imp_sspath : forall N x y,
-SSPath' N x y -> SSPath x y.
-Proof.
-  intros N x y edge'.
-  induction edge'.
-  constructor.
-  apply (ssedge'_imp_ssedge _ _ _ H).
-  apply (t_trans Node SSEdge x y z IHedge'1 IHedge'2).
-Qed.
+  Admitted. (* TODO!!! *)
+(* Assumptions that may be of use?
+   - SSPath is the transitive closure of SSEdge, which
+      is known to be decidable (see ssedge_dec)
+   - Anything in Bundle?
+     - anything with an SSEdge is in the bundle
+     - we're working with a finite set of possible edges / relations ?
+   - Would writing a function that does a depth first search for
+     a path between x and y work?? Granted this would have to be
+     with the assumption we were working within a finite set,
+     and it would have to be a ListSet representation (which is 
+     not a problem, NoDup ListSet's are equivalent to
+     Ensembles that are Finite (see strict_order.v)) *)
 
 Theorem ppath_imp_sspath : forall i j,
 PredPath i j -> SSPath i j.
@@ -679,15 +509,6 @@ Proof.
   induction Hpath.
   constructor. right. exact H.
   apply (t_trans Node SSEdge x y z IHHpath1 IHHpath2).
-Qed.  
-
-Theorem ppath'_imp_sspath' : forall N i j,
-PredPath' N i j -> SSPath' N i j.
-Proof.
-  intros N i j Hpath.
-  induction Hpath.
-  constructor. right. exact H.
-  apply (t_trans Node (SSEdge' N) x y z IHHpath1 IHHpath2).
 Qed.  
 
 Theorem sspath_transitivity :
@@ -702,42 +523,6 @@ Qed.
 Definition SSPathEq : relation Node :=
 clos_refl_trans Node SSEdge.
 Hint Constructors clos_refl_trans.
-
-Inductive SSEq' (N:NodeSet) : relation Node :=
-| sseq'_refl : forall x, In Node N x -> SSEq' N x x.
-
-Definition SSPathEq' (N:NodeSet) : relation Node :=
-union Node (SSEq' N) (clos_trans Node (SSEdge' N)).
-
-Lemma sspatheq'_imp_sspatheq : forall N x y,
-SSPathEq' N x y -> SSPathEq x y.
-Proof.
-  intros N x y edge'.
-  induction edge'.
-  destruct H.
-  apply rt_refl.
-  induction H.
-    apply rt_step. eapply ssedge'_imp_ssedge. exact H.
-    eapply rt_trans. exact IHclos_trans1. exact IHclos_trans2.
-Qed.
-
-Theorem sspatheq'_imp_in_l : forall N x y,
-SSPathEq' N x y -> In Node N x.
-Proof.
-  intros N x y sspath'.
-  induction sspath'.
-    destruct H; auto.
-    apply (sspath'_imp_in_l N x y). exact H.
-Qed.
-
-Theorem sspatheq'_imp_in_r : forall N x y,
-SSPathEq' N x y -> In Node N y.
-Proof.
-  intros N x y sspath'.
-  induction sspath'.
-    destruct H; auto.
-    apply (sspath'_imp_in_r N x y). exact H.
-Qed.
 
 Theorem sspatheq_opts: forall n m,
 SSPathEq n m -> SSPath n m \/ n = m.
@@ -755,26 +540,6 @@ Proof.
       right. subst. reflexivity.
 Qed.
 
-Theorem sspatheq'_opts: forall N n m,
-SSPathEq' N n m -> SSPath' N n m \/ n = m.
-Proof.
-  intros N n m Hpatheq.
-  induction Hpatheq.
-  right. destruct H. reflexivity.
-  left. exact H.
-Qed.
-
-Theorem sspath'_transitivity : forall (N : NodeSet),
-Transitive Node (SSPath' N).
-Proof.
-  intros N i j k Hij Hjk.
-  destruct Hij.
-  eapply t_trans. apply t_step. exact H.
-  exact Hjk.
-  eapply t_trans. exact Hij1. eapply t_trans. exact Hij2.
-  exact Hjk.
-Qed.
-
 Theorem sspatheq_transitivity :
 Transitive Node SSPathEq.
 Proof.
@@ -787,68 +552,142 @@ Proof.
     exact Hij2. exact Hjk.
 Qed.
 
-Theorem sspatheq'_transitivity : forall (N : NodeSet),
-Transitive Node (SSPathEq' N).
-Proof.
-  intros N i j k Hij Hjk.
-  destruct Hij.
-    destruct H. exact Hjk. 
-    destruct Hjk. destruct H0.
-    right. exact H. 
-    right. eapply t_trans. exact H.
-    exact H0.
-Qed.
-
 (* In for members of pairs *)
-Inductive InPair {X:Type} : Ensemble (X*X) -> X -> Prop :=
-| inp_l : forall E x,
-            (exists y, In (X*X) E (x,y))
-            -> InPair E x
-| inp_r : forall E x,
-            (exists y, In (X*X) E (y,x))
-            -> InPair E x.
+Inductive InPair {X:Type} (E:Ensemble (X*X)) (x:X): Prop :=
+| inp_l : (exists y, In (X*X) E (x,y))
+          -> InPair E x
+| inp_r : (exists y, In (X*X) E (y,x))
+          -> InPair E x.
 Hint Constructors InPair.
 
-Inductive ValidEdges : NodeSet -> EdgeSet -> Prop :=
-| validedges : forall N E,
-                 (* All Nodes are in an Edge *)
-                 (forall x, In Node N x -> InPair E x)
-                 (* All Nodes in an Edge are in the Node set *)
-                 /\ (forall x, InPair E x -> In Node N x)
-                 (* All edges represent an (SSEdgeEq' N) relation *)
-                 /\ (forall x y, In Edge E (x,y) -> SSPathEq' N x y) ->
-                 ValidEdges N E.
+(* * * * * BUNDLE DEFINITION * * * * *)
+Inductive ValidEdges (N: NodeSet) (E: EdgeSet) : Prop :=
+| validedges :
+    (* N is the set of nodes incident with any edge in E *)
+    (and (forall x, InPair E x -> In Node N x)
+    (* edges and the SSEdge property are equivalent *)
+         (forall x y, In Edge E (x,y) <-> SSEdge x y))
+    -> ValidEdges N E.
+(* TODO justification *)
 
-(* An rx implies the existance of a tx *)
-Definition TxExists (N:NodeSet) (E:EdgeSet) :=
-  (forall y m, Node_smsg y = rx m -> 
-               In Node N y ->  
-               (exists x, (In Node N x
-                           /\ Node_smsg x = tx m
-                           /\ Comm x y
-                           /\ In Edge E (x,y)))).
-
-(* A node can rx a msg from only one tx at a time *)
-Definition UniqTx (N:NodeSet) :=
-  (forall x y z, In Node N x ->
-                 In Node N y ->
-                 In Node N z ->
-                 Comm x z ->
-                 Comm y z ->
-                 x = y).
-
-Definition UniqueTxInSet (N:NodeSet) (E:EdgeSet) : Prop :=
-UniqTx N /\ TxExists N E.
+Inductive ExistsUniqueTx (N:NodeSet) (E:EdgeSet) : Prop :=
+| uniqtx : forall z m, In Node N z ->
+              Node_smsg z = rx m -> 
+              (* there exists a transmitter *)
+              (exists x, (Node_smsg x = tx m
+                          /\ Comm x z
+                          /\ In Edge E (x,z)))
+              (* a transmitter is unique *)
+              /\ (forall x y, Comm x z ->
+                              Comm y z ->
+                              x = y) -> ExistsUniqueTx N E.
+(* TODO justification *)
 
 Definition Acyclic (N:NodeSet) (E:EdgeSet) : Prop :=
-forall x, ~ In Edge E (x,x).
+forall x, ~ SSPath x x.
+(* TODO justification *)
 
 Inductive Bundle : NodeSet -> EdgeSet -> Prop :=
 | bundle : forall N E,
              Finite Node N ->
              Finite Edge E ->
              ValidEdges N E ->
-             UniqueTxInSet N E ->
+             ExistsUniqueTx N E ->
              Acyclic N E ->
              Bundle N E.
-(* TODO - check Bundle def for correctness *)             
+
+Lemma neq_sspatheq_imp_sspath : forall x y,
+x <> y ->
+SSPathEq x y ->
+SSPath x y.
+Proof.
+  intros x y neq patheqxy.
+  induction patheqxy.
+  Case "SSEdge x y".
+    apply t_step. exact H.
+  Case "x = y". assert False as F. apply neq. reflexivity. inversion F.
+  Case "x y z".
+    destruct (eq_node_dec y z) as [eqyz | neqyz].
+    SCase "y = z". subst y. apply IHpatheqxy1. exact neq.
+    SCase "y <> z". 
+      destruct (eq_node_dec x y) as [eqxy | neqxy].
+      SSCase "x = y". subst x. apply IHpatheqxy2. exact neqyz.
+      SSCase "x <> y". eapply t_trans. apply IHpatheqxy1. exact neqxy.
+        apply IHpatheqxy2. exact neqyz.
+Qed.      
+
+Lemma sspatheq_trans_cycle : forall x y,
+x <> y ->
+SSPathEq x y ->
+SSPathEq y x ->
+SSPath x x.
+Proof.
+  intros x y neq patheqxy patheqyx.
+  eapply t_trans.
+  Case "path x y".
+    eapply neq_sspatheq_imp_sspath. exact neq. exact patheqxy.
+  Case "path y x".
+    eapply neq_sspatheq_imp_sspath. intros contra. subst.
+    apply neq. reflexivity.
+    exact patheqyx.
+Qed.
+
+Lemma bunble_partial_order : forall N E,
+Bundle N E ->
+Order Node SSPathEq.
+Proof.
+  intros N E B.
+  split.
+  Case "Reflexivity".
+    intros x. apply rt_refl. 
+  Case "Transitivity".
+    intros x y z xy yz.
+    eapply rt_trans. exact xy. exact yz.
+  Case "AntiSymmetry".
+    intros x y xy yz.
+    destruct B as [N E finN finE valE uniqtx acyc].
+    destruct (eq_node_dec x y) as [xyeq | xyneq].
+    SCase "x = y". exact xyeq.
+    SCase "x <> y". 
+      assert (SSPath x x) as contraxx.
+        eapply sspatheq_trans_cycle. exact xyneq.
+        exact xy. exact yz. apply acyc in contraxx. inversion contraxx.
+Qed.
+
+Lemma sspath_strict_order : forall N E,
+Bundle N E ->
+StrictOrder Node SSPath.
+Proof.
+  intros N E B.
+  destruct B as [N E finN finE valE uniqtx acyc].
+  split.
+  Case "Irreflexivity".
+    intros x. apply acyc.
+  Case "Transitivity".
+    apply sspath_transitivity.
+Qed.
+
+Lemma bundle_subset_minimal : forall N E N',
+Bundle N E ->
+Included Node N' N ->
+N' <> Empty_set Node ->
+exists min, In Node N' min 
+/\ forall x, In Node N' x -> ~ SSPath x min.
+Proof.
+  intros N E N' B incl nempty.
+  inversion B as [M F finN finE valE uniqtx acyc]; subst.
+  assert (Finite Node N') as finN'. eapply Finite_downward_closed.
+    exact finN. exact incl.
+  destruct (finite_cardinal Node N' finN') as [n card].
+  destruct n. inversion card. rewrite H in nempty.
+  assert False as F. apply nempty. reflexivity. inversion F.
+  destruct (minimal_finite_ensemble_mem Node 
+                                        eq_node_dec 
+                                        SSPath 
+                                        sspath_dec 
+                                        (sspath_strict_order N E B) 
+                                        N' 
+                                        n 
+                                        card) as [min [minIn nolt]].
+  exists min. split. exact minIn. exact nolt.
+Qed.
