@@ -1,8 +1,9 @@
 (strandspace.v)
 * Strand Spaces: Proving Security Protocols Correct
+(http://web.cs.wpi.edu/~guttman/pubs/jcs_strand_spaces.pdf)
 ** Strand Space General Theorems
 ***[DONE] Lemma 2.7a | partial order of edges in a bundle
-***[] Lemma 2.7b | non-empty subsets of bundle's nodes have edge-minimal members
+***[DONE] Lemma 2.7b | non-empty subsets of bundle's nodes have edge-minimal members
 ***[] Lemma 2.8 | minimal members are tx-ers
 ***[] Lemma 2.9 | originating node for subterms
 ***[] Proposition 2.12 | encrypted subterms
