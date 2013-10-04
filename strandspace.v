@@ -603,7 +603,8 @@ Qed.
 
 Lemma restricted_to_set : forall N E,
 Bundle N E ->
-exists s, is_restricted SSEdge s.
+exists s, is_restricted SSEdge s /\
+forall x, ListSet.set_In x s <-> In Node N x.
 Proof.
   intros N E B.
   destruct B as [finN [finE [valE [uniqtx acyc]]]].
@@ -611,14 +612,15 @@ Proof.
   destruct (ensemble_imp_set Node eq_node_dec N finN) 
     as [s [inAll [nodup [n [slen scard]]]]].
   exists s.
+  split.
   intros x y sspath.
   split.
   apply inAll. apply EimpInN. constructor. exists y. 
   apply EimpSSEdge. exact sspath.
   apply inAll. apply EimpInN. constructor 2. exists x. 
   apply EimpSSEdge. exact sspath.
+  exact inAll.
 Qed.
-
 
 Lemma sspath_dec : forall N E s,
 Bundle N E ->
@@ -629,10 +631,14 @@ Proof.
   intros N E s B bset restrict.
   destruct B as [finN [finE [valE [uniqtx acyc]]]].
   intros x y.
-  remember (resticted_dec_clos_trans_dec eq_node_dec ssedge_dec restrict) as alldec.
+  remember (restricted_dec_clos_trans_dec 
+              eq_node_dec 
+              ssedge_dec 
+              restrict) as alldec.
   apply alldec.
 Qed.
-  (* BOOKMARK
+  (* Previous error while using "restricted_dec_clos_trans_dec":
+
 Error: Illegal application (Type Error): 
 The term "resticted_dec_clos_trans_dec" of type
  "forall (A : Set) (R : relation A),
@@ -648,6 +654,11 @@ cannot be applied to the terms
  "restrict" : "is_restricted SSEdge s"
 The 1st term has type "Type" which should be coercible to 
 "Set".
+
+Fixed by changing "Set" to "Type" in RelDec.v... which is what the 
+documentation said it should be anyway...
+Also did a grep search and replace for "resticted" to "restricted"
+because that was just hurting my head.
    *)
 
 
@@ -700,7 +711,7 @@ Proof.
     eapply rt_trans. exact xy. exact yz.
   Case "AntiSymmetry".
     intros x y xy yz.
-    destruct B as [N E finN finE valE uniqtx acyc].
+    destruct B as [finN [finE [valE [uniqtx acyc]]]].
     destruct (eq_node_dec x y) as [xyeq | xyneq].
     SCase "x = y". exact xyeq.
     SCase "x <> y". 
@@ -714,7 +725,7 @@ Bundle N E ->
 StrictOrder Node SSPath.
 Proof.
   intros N E B.
-  destruct B as [N E finN finE valE uniqtx acyc].
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
   split.
   Case "Irreflexivity".
     intros x. apply acyc.
@@ -730,18 +741,22 @@ exists min, In Node N' min
 /\ forall x, In Node N' x -> ~ SSPath x min.
 Proof.
   intros N E N' B incl nempty.
-  inversion B as [M F finN finE valE uniqtx acyc]; subst.
+  assert (Bundle N E) as bundle. exact B.
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
   assert (Finite Node N') as finN'. eapply Finite_downward_closed.
     exact finN. exact incl.
   destruct (finite_cardinal Node N' finN') as [n card].
   destruct n. inversion card. rewrite H in nempty.
   assert False as F. apply nempty. reflexivity. inversion F.
+  destruct (restricted_to_set N E bundle) as [s [restricted setequiv]].
+  assert (forall x y, {SSPath x y} + {~ SSPath x y}) as rdec.
+  apply (sspath_dec N E s bundle). exact setequiv. exact restricted.  
   destruct (minimal_finite_ensemble_mem 
               Node 
               eq_node_dec 
               SSPath 
-              sspath_dec 
-              (sspath_strict_order N E B) 
+              rdec
+              (sspath_strict_order N E bundle) 
               N' 
               n 
               card) as [min [minIn nolt]].
