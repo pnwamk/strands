@@ -1,13 +1,7 @@
-Require Import Relations Omega Ensembles Finite_sets Finite_sets_facts List ListSet util.
+Require Import Relations Omega Ensembles Finite_sets Finite_sets_facts.
+Require Import List ListSet util.
 
 Require Import ListSet List Relations_1.
-
-(* List Notations *)
-Notation " [ ] " := nil.
-Notation " [ x ] " := (cons x nil).
-Notation " [ x , .. , y ] " := (cons x .. (cons y nil) ..).
-Notation "x :: l" := (cons x l) (at level 60, right associativity). 
-
 
 Section strict_order.
 
