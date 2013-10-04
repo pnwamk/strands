@@ -19,8 +19,7 @@
 Require Import Logic List Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
 Require Import Relation_Operators strictorder util.
-Require Import RelDec.
-Require Import RelSub.
+Require Import CoLoRRelDec CoLoRRelSub.
 
 (* atomic messages *)
 Variable Text : Set.
