@@ -16,10 +16,11 @@
    v.283 n.2, p.333-380, June 14, 2002.
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
-
 Require Import Logic List Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
 Require Import Relation_Operators strictorder util.
+Require Import CoLoR.Util.Relation.RelDec.
+Require Import CoLoR.Util.Relation.RelSub.
 
 (* atomic messages *)
 Variable Text : Set.
@@ -380,7 +381,7 @@ Hint Resolve pred_antisymmetry.
 (* predecessor multi edge (not nec. immediate predecessor) *)
 (* node's eventual predecessor -> node -> Prop *)
 Definition PredPath : relation Node := 
-clos_trans Node Pred.
+clos_trans Pred.
  (* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
@@ -428,7 +429,7 @@ Qed.
 Hint Resolve ppath_transitivity.
 
 Definition SSEdge : relation Node :=
-union Node Comm Pred.
+union Comm Pred.
 Hint Constructors or.
 
 Lemma ssedge_dec : forall x y,
@@ -482,24 +483,7 @@ Hint Resolve ssedge_antisymmetry.
 
 (* transitive closure of edges. *)
 Definition SSPath : relation Node := 
-clos_trans Node SSEdge.
-
-Lemma sspath_dec : forall x y,
-{SSPath x y} + {~SSPath x y}.
-Proof.
-  Admitted. (* TODO!!! *)
-(* Assumptions that may be of use?
-   - SSPath is the transitive closure of SSEdge, which
-      is known to be decidable (see ssedge_dec)
-   - Anything in Bundle?
-     - anything with an SSEdge is in the bundle
-     - we're working with a finite set of possible edges / relations ?
-   - Would writing a function that does a depth first search for
-     a path between x and y work?? Granted this would have to be
-     with the assumption we were working within a finite set,
-     and it would have to be a ListSet representation (which is 
-     not a problem, NoDup ListSet's are equivalent to
-     Ensembles that are Finite (see strict_order.v)) *)
+clos_trans SSEdge.
 
 Theorem ppath_imp_sspath : forall i j,
 PredPath i j -> SSPath i j.
@@ -521,7 +505,7 @@ Qed.
 
 (* transitive reflexive closure of edges. *)
 Definition SSPathEq : relation Node :=
-clos_refl_trans Node SSEdge.
+clos_refl_trans SSEdge.
 Hint Constructors clos_refl_trans.
 
 Theorem sspatheq_opts: forall n m,
@@ -587,14 +571,85 @@ Definition Acyclic (N:NodeSet) (E:EdgeSet) : Prop :=
 forall x, ~ SSPath x x.
 (* TODO justification *)
 
-Inductive Bundle : NodeSet -> EdgeSet -> Prop :=
-| bundle : forall N E,
-             Finite Node N ->
-             Finite Edge E ->
-             ValidEdges N E ->
-             ExistsUniqueTx N E ->
-             Acyclic N E ->
-             Bundle N E.
+Definition Bundle (N:NodeSet) (E:EdgeSet) : Prop :=
+             Finite Node N /\
+             Finite Edge E /\
+             ValidEdges N E /\
+             ExistsUniqueTx N E /\
+             Acyclic N E.
+
+Definition bundle_set (s: ListSet.set Node) (N:NodeSet) : Prop :=
+forall x, ListSet.set_In x s <-> In Node N x.
+             
+Lemma sspath_imp_ssedge_l : forall x y,
+SSPath x y ->
+exists x', SSEdge x x'.
+Proof.
+  intros x y sspath.
+  induction sspath.
+  exists y. exact H.
+  exact IHsspath1.
+Qed.  
+
+Lemma sspath_imp_ssedge_r : forall x y,
+SSPath x y ->
+exists y', SSEdge y' y.
+Proof.
+  intros x y sspath.
+  induction sspath.
+  exists x. exact H.
+  exact IHsspath2.
+Qed.  
+
+Lemma restricted_to_set : forall N E,
+Bundle N E ->
+exists s, is_restricted SSEdge s.
+Proof.
+  intros N E B.
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
+  destruct valE as [[EimpInN EimpSSEdge]].
+  destruct (ensemble_imp_set Node eq_node_dec N finN) 
+    as [s [inAll [nodup [n [slen scard]]]]].
+  exists s.
+  intros x y sspath.
+  split.
+  apply inAll. apply EimpInN. constructor. exists y. 
+  apply EimpSSEdge. exact sspath.
+  apply inAll. apply EimpInN. constructor 2. exists x. 
+  apply EimpSSEdge. exact sspath.
+Qed.
+
+
+Lemma sspath_dec : forall N E s,
+Bundle N E ->
+bundle_set s N ->
+is_restricted SSEdge s ->
+forall x y, {SSPath x y} + {~SSPath x y}.
+Proof.
+  intros N E s B bset restrict.
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
+  intros x y.
+  remember (resticted_dec_clos_trans_dec eq_node_dec ssedge_dec restrict) as alldec.
+  apply alldec.
+Qed.
+  (* BOOKMARK
+Error: Illegal application (Type Error): 
+The term "resticted_dec_clos_trans_dec" of type
+ "forall (A : Set) (R : relation A),
+  RelMidex.eq_dec A ->
+  RelMidex.rel_dec R ->
+  forall l : list A, is_restricted R l -> RelMidex.rel_dec (clos_trans R)"
+cannot be applied to the terms
+ "Node" : "Type"
+ "SSEdge" : "relation Node"
+ "eq_node_dec" : "forall x y : Node, {x = y} + {x <> y}"
+ "ssedge_dec" : "forall x y : Node, {SSEdge x y} + {~ SSEdge x y}"
+ "s" : "ListSet.set Node"
+ "restrict" : "is_restricted SSEdge s"
+The 1st term has type "Type" which should be coercible to 
+"Set".
+   *)
+
 
 Lemma neq_sspatheq_imp_sspath : forall x y,
 x <> y ->
@@ -681,13 +736,14 @@ Proof.
   destruct (finite_cardinal Node N' finN') as [n card].
   destruct n. inversion card. rewrite H in nempty.
   assert False as F. apply nempty. reflexivity. inversion F.
-  destruct (minimal_finite_ensemble_mem Node 
-                                        eq_node_dec 
-                                        SSPath 
-                                        sspath_dec 
-                                        (sspath_strict_order N E B) 
-                                        N' 
-                                        n 
-                                        card) as [min [minIn nolt]].
+  destruct (minimal_finite_ensemble_mem 
+              Node 
+              eq_node_dec 
+              SSPath 
+              sspath_dec 
+              (sspath_strict_order N E B) 
+              N' 
+              n 
+              card) as [min [minIn nolt]].
   exists min. split. exact minIn. exact nolt.
 Qed.
