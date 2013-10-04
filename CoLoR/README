@@ -1,0 +1,15 @@
+These are files extracted from the CoLor Coq library on rewriting
+and termination. For more info, Check http://color.inria.fr/
+
+The only modifications have been to RelDec.v, where Variable 
+"Variable A : Set." was changed to "Variable A : Type."
+
+The documentation for this file indicated it should "Type" and
+it is unclear whether the documentation or code was in error.
+Regardless... the change to "Type" was made for this
+limited subset of the library. Also, titles of Lemmas and
+Theorems with the substring "resticted "were changed to 
+instead contain "restricted".
+
+Andrew Kent
+20131004
