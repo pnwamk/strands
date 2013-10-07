@@ -204,7 +204,7 @@ Definition Node_smsg (n:Node) : SMsg :=
   end.
 
 (* unsigned message of a node *)
-Fixpoint Node_msg (n:Node) : Msg :=
+Definition Node_msg (n:Node) : Msg :=
   match Node_smsg n with
     | tx t => t
     | rx t => t
@@ -212,6 +212,28 @@ Fixpoint Node_msg (n:Node) : Msg :=
 (* [REF 1] Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
+
+Lemma node_smsg_msg_tx : forall n t,
+Node_smsg n = tx t ->
+Node_msg n = t.
+Proof.
+  intros n t nsmsg.
+  unfold Node_msg. rewrite nsmsg. reflexivity. 
+Qed.
+
+Lemma node_smsg_msg_rx : forall n t,
+Node_smsg n = rx t ->
+Node_msg n = t.
+Proof.
+  intros n t nsmsg.
+  unfold Node_msg. rewrite nsmsg. reflexivity. 
+Qed.
+
+Definition is_tx (n:Node) : Prop :=
+exists t, Node_smsg n = tx t.
+
+Definition is_rx (n:Node) : Prop :=
+exists t, Node_smsg n = rx t.
 
 Definition eq_node_dec : forall x y : Node,
  {x = y} + {x <> y}.
@@ -553,8 +575,8 @@ Inductive ValidEdges (N: NodeSet) (E: EdgeSet) : Prop :=
     -> ValidEdges N E.
 (* TODO justification *)
 
-Inductive ExistsUniqueTx (N:NodeSet) (E:EdgeSet) : Prop :=
-| uniqtx : forall z m, In Node N z ->
+Definition ExistsUniqueTx (N:NodeSet) (E:EdgeSet) : Prop :=
+  (forall z m, In Node N z ->
               Node_smsg z = rx m -> 
               (* there exists a transmitter *)
               (exists x, (Node_smsg x = tx m
@@ -563,7 +585,7 @@ Inductive ExistsUniqueTx (N:NodeSet) (E:EdgeSet) : Prop :=
               (* a transmitter is unique *)
               /\ (forall x y, Comm x z ->
                               Comm y z ->
-                              x = y) -> ExistsUniqueTx N E.
+                              x = y)).
 (* TODO justification *)
 
 Definition Acyclic (N:NodeSet) (E:EdgeSet) : Prop :=
@@ -576,6 +598,20 @@ Definition Bundle (N:NodeSet) (E:EdgeSet) : Prop :=
              ValidEdges N E /\
              ExistsUniqueTx N E /\
              Acyclic N E.
+
+Lemma bundle_ssedge_inclusion : forall N E n m,
+Bundle N E ->
+SSEdge n m ->
+(In Node N n -> In Node N m) /\ (In Node N m -> In Node N n).
+Proof.
+  intros N E n m B ssedge. split; intros Hin.
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
+  apply valE in ssedge. apply valE. constructor 2.
+  exists n. exact ssedge.
+  destruct B as [finN [finE [valE [uniqtx acyc]]]].
+  apply valE in ssedge. apply valE. constructor 1.
+  exists m. exact ssedge.
+Qed.
 
 Definition bundle_set (s: ListSet.set Node) (N:NodeSet) : Prop :=
 forall x, ListSet.set_In x s <-> In Node N x.
@@ -636,30 +672,6 @@ Proof.
               restrict) as alldec.
   apply alldec.
 Qed.
-  (* Previous error while using "restricted_dec_clos_trans_dec":
-
-Error: Illegal application (Type Error): 
-The term "resticted_dec_clos_trans_dec" of type
- "forall (A : Set) (R : relation A),
-  RelMidex.eq_dec A ->
-  RelMidex.rel_dec R ->
-  forall l : list A, is_restricted R l -> RelMidex.rel_dec (clos_trans R)"
-cannot be applied to the terms
- "Node" : "Type"
- "SSEdge" : "relation Node"
- "eq_node_dec" : "forall x y : Node, {x = y} + {x <> y}"
- "ssedge_dec" : "forall x y : Node, {SSEdge x y} + {~ SSEdge x y}"
- "s" : "ListSet.set Node"
- "restrict" : "is_restricted SSEdge s"
-The 1st term has type "Type" which should be coercible to 
-"Set".
-
-Fixed by changing "Set" to "Type" in RelDec.v... which is what the 
-documentation said it should be anyway...
-Also did a grep search and replace for "resticted" to "restricted"
-because that was just hurting my head.
-   *)
-
 
 Lemma neq_sspatheq_imp_sspath : forall x y,
 x <> y ->
@@ -732,12 +744,16 @@ Proof.
     apply sspath_transitivity.
 Qed.
 
+Definition set_minimal (N:NodeSet) (n:Node) : Prop :=
+In Node N n /\
+(forall x, In Node N x ->
+           ~ SSPath x n).
+
 Lemma bundle_subset_minimal : forall N E N',
 Bundle N E ->
 Included Node N' N ->
 N' <> Empty_set Node ->
-exists min, In Node N' min 
-/\ forall x, In Node N' x -> ~ SSPath x min.
+exists min, set_minimal N' min.
 Proof.
   intros N E N' B incl nempty.
   assert (Bundle N E) as bundle. exact B.
@@ -761,3 +777,109 @@ Proof.
               card) as [min [minIn nolt]].
   exists min. split. exact minIn. exact nolt.
 Qed.
+
+(* Lemma 2.8 - set minimal is tx *)
+Lemma minimal_is_tx : forall N E N',
+Bundle N E ->
+Included Node N' N ->
+(forall m m', (In Node N m 
+               /\ In Node N m'
+               /\ Node_msg m = Node_msg m') -> (* ADDED in N condition *)
+               (In Node N' m <-> In Node N' m')) ->
+forall n, set_minimal N' n ->
+is_tx n.
+Proof.
+  intros N E N' bundle sub incl n setmin.
+  remember bundle as B.
+  destruct bundle as [finN [finE [valE [uniqtx acyc]]]].
+  remember (Node_smsg n) as nsmsg. symmetry in Heqnsmsg.
+  destruct nsmsg.
+  exists m. exact Heqnsmsg.
+  unfold ExistsUniqueTx in uniqtx.
+  assert (In Node N n) as nIn. destruct setmin; auto.
+  destruct (uniqtx n m nIn Heqnsmsg) as [[ntx [ntxsmsg [commn inE]]] uniq].
+  assert False as F. destruct setmin. apply (H0 ntx). eapply incl.
+    split. eapply bundle_ssedge_inclusion. exact B. constructor. exact commn.
+    exact nIn. split. exact nIn.
+    apply node_smsg_msg_rx in Heqnsmsg. apply node_smsg_msg_tx in ntxsmsg.
+    rewrite ntxsmsg. symmetry. exact Heqnsmsg. exact H.
+    constructor. constructor. exact commn.
+  inversion F.
+Qed.
+
+Definition OccursIn (t:Msg) (n:Node) : Prop :=
+Subterm t (Node_msg n).
+ (* [REF 1] Definition 2.3.5 pg 6
+   "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
+
+Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
+(exists t, In Msg I t /\ Node_smsg n = tx t)
+/\ forall n', PredPath n' n -> ~ In Msg I (Node_msg n').
+ (* [REF 1] Definition 2.3.6 pg 6
+   "Suppose I is a set of unsigned terms. The node n is an entrypoint for I
+    iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
+    is not in I." *)
+
+Definition Origin (t:Msg) (n:Node) : Prop :=
+exists I, (forall t', Subterm t t' -> In Msg I t')
+/\ EntryPoint n I.
+ (* [REF 1] Definition 2.3.7 pg 6
+   "An unsigned term t originates on n iff n is an entry point
+    for the set I = {t' : t is a subterm of t'}" *)
+
+(*
+  TODO : Write Origin this way, come up with
+  proof-based way to justify this (equivalence, or 
+  at least one way implication from this to 
+  paper's notion
+
+  exists t' (t subterm t') s.t. n = +t'
+  forall t' (t subterm t'), forall n' st n' =>+ n,
+        ~ term(n') = t'
+*)
+
+Definition UniqOrigin (t:Msg) : Prop :=
+exists n, Origin t n
+/\ forall m, Origin t m -> n = m.
+ (* [REF 1] Definition 2.3.8 pg 7
+   "An unsigned term t is uniquely originating iff t originates on
+    a unique n." *)
+
+(* Lemma 2.9 *)
+Lemma min_origin : forall N E N' n t,
+Bundle N E ->
+(forall m, (In Node N m 
+           /\ Subterm t (Node_msg m)) <-> 
+           In Node N' m) ->
+set_minimal N' n ->
+Origin t n.
+Proof.
+  intros N E N' n t bundle N'def nmin.
+  remember bundle as B.
+  destruct bundle as [finN [finE [valE [uniqtx acyc]]]].
+  assert (In Node N' n) as nIn. destruct nmin; auto.
+  assert (Subterm t (Node_msg n)) as tsubn.
+    apply (N'def n) in nIn. destruct nIn; auto.
+  assert (is_tx n) as nistx.
+    assert (Included Node N' N) as incl.
+      intros x xIn. apply N'def in xIn. destruct xIn; auto.
+    apply (minimal_is_tx N E N' B incl).
+    intros x y eqmsg.
+    destruct eqmsg as [xIn [yIn eqmsg]].
+    split; intros Hin.
+    Case "m in -> m' in".
+      apply N'def in Hin. destruct Hin as [xInN tsubx]. 
+      assert (Subterm t (Node_msg y)) as ysubt. rewrite <- eqmsg.
+        exact tsubx.
+      apply N'def. split. exact yIn. exact ysubt.
+    Case "m' in -> m in".
+      apply N'def in Hin. destruct Hin as [yInN tsuby].
+      apply N'def. split. exact xIn. 
+      assert (Subterm t (Node_msg x)) as xsubt. rewrite eqmsg.
+        exact tsuby.
+      exact xsubt. 
+    exact nmin.
+    unfold Origin. 
+    assert (exists I, forall t', Subterm t t' ->
+
+unfold EntryPoint.
