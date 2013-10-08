@@ -827,6 +827,11 @@ exists I, (forall t', Subterm t t' -> In Msg I t')
    "An unsigned term t originates on n iff n is an entry point
     for the set I = {t' : t is a subterm of t'}" *)
 
+Definition Origin' (t:Msg) (n:Node) : Prop :=
+is_tx n
+/\ Subterm t (Node_msg n)
+/\ forall n', PredPath n' n -> ~Subterm t (Node_msg n').
+
 (*
   TODO : Write Origin this way, come up with
   proof-based way to justify this (equivalence, or 
@@ -852,7 +857,7 @@ Bundle N E ->
            /\ Subterm t (Node_msg m)) <-> 
            In Node N' m) ->
 set_minimal N' n ->
-Origin t n.
+Origin' t n.
 Proof.
   intros N E N' n t bundle N'def nmin.
   remember bundle as B.
@@ -879,7 +884,17 @@ Proof.
         exact tsuby.
       exact xsubt. 
     exact nmin.
-    unfold Origin. 
-    assert (exists I, forall t', Subterm t t' ->
-
-unfold EntryPoint.
+  split. exact nistx.
+  split. exact tsubn.
+  intros n' predn' contrasub.
+  assert (In Node N' n') as n'In.
+    apply N'def. split.
+    destruct valE as [[pairImpN HInEedge]].
+    apply pairImpN. left. 
+    assert (SSPath n' n) as npath.
+      apply ppath_imp_sspath. exact predn'.
+    destruct (sspath_imp_ssedge_l n' n npath) as [x n'edge].
+    exists x. apply HInEedge. exact n'edge. exact contrasub.
+  destruct nmin as [nIn2 noprev]. apply (noprev n'). exact n'In.
+  apply ppath_imp_sspath. exact predn'.
+Qed.
