@@ -812,7 +812,8 @@ Subterm t (Node_msg n).
  (* [REF 1] Definition 2.3.5 pg 6
    "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
 
-Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
+(* As close to paper def as possible *)
+Definition EntryPoint_Strict (n:Node) (I: Ensemble Msg) : Prop :=
 (exists t, In Msg I t /\ Node_smsg n = tx t)
 /\ forall n', PredPath n' n -> ~ In Msg I (Node_msg n').
  (* [REF 1] Definition 2.3.6 pg 6
@@ -820,28 +821,33 @@ Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
     iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
     is not in I." *)
 
-Definition Origin (t:Msg) (n:Node) : Prop :=
-exists I, (forall t', Subterm t t' -> In Msg I t')
-/\ EntryPoint n I.
+(* As close to paper def as possible *)
+Definition Origin_Strict (t:Msg) (n:Node) : Prop :=
+exists I, (forall t', Subterm t t' <-> In Msg I t')
+/\ EntryPoint_Strict n I.
  (* [REF 1] Definition 2.3.7 pg 6
    "An unsigned term t originates on n iff n is an entry point
     for the set I = {t' : t is a subterm of t'}" *)
 
-Definition Origin' (t:Msg) (n:Node) : Prop :=
+Definition Origin (t:Msg) (n:Node) : Prop :=
 is_tx n
 /\ Subterm t (Node_msg n)
 /\ forall n', PredPath n' n -> ~Subterm t (Node_msg n').
 
-(*
-  TODO : Write Origin this way, come up with
-  proof-based way to justify this (equivalence, or 
-  at least one way implication from this to 
-  paper's notion
-
-  exists t' (t subterm t') s.t. n = +t'
-  forall t' (t subterm t'), forall n' st n' =>+ n,
-        ~ term(n') = t'
-*)
+Lemma Origin_imp_strict_defs : forall I t n,
+(forall t', Subterm t t' <-> In Msg I t') ->
+Origin t n ->
+Origin_Strict t n.
+Proof.
+  intros I t n Iprop Orig.
+  exists I. split. exact Iprop.
+  destruct Orig as [ntx [nsub nopred]].
+  split. exists (Node_msg n).
+  split. apply Iprop in nsub. exact nsub.
+  destruct ntx. erewrite node_smsg_msg_tx. exact H. exact H.
+  intros n' pred contraIn.
+  apply nopred in pred. apply Iprop in contraIn. contradiction.
+Qed.
 
 Definition UniqOrigin (t:Msg) : Prop :=
 exists n, Origin t n
