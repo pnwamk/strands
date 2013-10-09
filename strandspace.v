@@ -813,7 +813,7 @@ Subterm t (Node_msg n).
    "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
 
 (* As close to paper def as possible *)
-Definition EntryPoint_Strict (n:Node) (I: Ensemble Msg) : Prop :=
+Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
 (exists t, In Msg I t /\ Node_smsg n = tx t)
 /\ forall n', PredPath n' n -> ~ In Msg I (Node_msg n').
  (* [REF 1] Definition 2.3.6 pg 6
@@ -822,9 +822,9 @@ Definition EntryPoint_Strict (n:Node) (I: Ensemble Msg) : Prop :=
     is not in I." *)
 
 (* As close to paper def as possible *)
-Definition Origin_Strict (t:Msg) (n:Node) : Prop :=
+Definition Origin_with_Ex_Set (t:Msg) (n:Node) : Prop :=
 exists I, (forall t', Subterm t t' <-> In Msg I t')
-/\ EntryPoint_Strict n I.
+/\ EntryPoint n I.
  (* [REF 1] Definition 2.3.7 pg 6
    "An unsigned term t originates on n iff n is an entry point
     for the set I = {t' : t is a subterm of t'}" *)
@@ -837,7 +837,7 @@ is_tx n
 Lemma Origin_imp_strict_defs : forall I t n,
 (forall t', Subterm t t' <-> In Msg I t') ->
 Origin t n ->
-Origin_Strict t n.
+Origin_with_Ex_Set t n.
 Proof.
   intros I t n Iprop Orig.
   exists I. split. exact Iprop.
@@ -863,7 +863,7 @@ Bundle N E ->
            /\ Subterm t (Node_msg m)) <-> 
            In Node N' m) ->
 set_minimal N' n ->
-Origin' t n.
+Origin t n.
 Proof.
   intros N E N' n t bundle N'def nmin.
   remember bundle as B.
