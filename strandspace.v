@@ -44,8 +44,8 @@ Hint Resolve eq_key_dec.
 (* message or term *)
 Inductive Msg : Type :=
 | msg_text : Text -> Msg
-| msg_app : Msg -> Msg -> Msg 
-| msg_crypt : Key -> Msg -> Msg.
+| msg_join : Msg -> Msg -> Msg 
+| msg_encr : Key -> Msg -> Msg.
 (* [REF 1] Section 2.1 pg 5 
            Section 2.3 pg 9 *)
 (* [REF 2] pg 4 paragraph 3 (details of encryption and subterms) *)
@@ -63,12 +63,12 @@ Hint Resolve eq_msg_dec.
 Inductive Subterm : Msg -> Msg -> Prop :=
 | st_refl : forall m, Subterm m m
 (* | stcryp : forall a g, Subterm a g -> Subterm a encrpt(g)  *)
-| st_app_l : forall st l r, 
-               Subterm st l -> Subterm st (msg_app l r)
-| st_app_r : forall st l r, 
-               Subterm st r -> Subterm st (msg_app l r)
-| st_crpyt : forall st t k, 
-               Subterm st t -> Subterm st (msg_crypt k t).
+| st_join_l : forall st l r, 
+               Subterm st l -> Subterm st (msg_join l r)
+| st_join_r : forall st l r, 
+               Subterm st r -> Subterm st (msg_join l r)
+| st_encr : forall st t k, 
+               Subterm st t -> Subterm st (msg_encr k t).
 (* [REF 1] Section 2.1 pg 6 and Definition 2.11 *)
 Hint Constructors Subterm.
 
@@ -904,3 +904,32 @@ Proof.
   destruct nmin as [nIn2 noprev]. apply (noprev n'). exact n'In.
   apply spath_imp_sspath. exact succn'.
 Qed.
+
+Notation " x | y " := (msg_join x y) (at level 60, right associativity). 
+Notation " { m }[ k ] " := (msg_encr k m).
+
+Theorem free_encryption : forall m m' k k',
+{m}[k] = {m'}[k'] -> m = m' /\ k = k'.
+Proof.
+  intros m m' k k' encreq.
+  inversion encreq. split; auto. 
+Qed.
+ (* [REF 1] Definition 2.4 Axiom 1 pg 10
+   "A cipher text can be regarded as a cipher text in
+   just one way." 
+
+   NOTE: This was an Axiom in the paper... but in Coq
+   with these definitions this is provable... or
+   inherently implied by the definitions/structures
+*)
+
+(* BROKEN - type conflicts with the way
+   we've defined Texts, Keys, and Msgs... *)
+Theorem free_term_algebra : forall m m' n n' k k',
+(m | n = m' | n' -> m = m' /\ n = n')
+/\ (m | n <> {m'}[k])
+/\ (forall (k:Key), k <> m | n)
+/\ (forall (t:Text), t <> m | n)
+/\ (forall (k:Key), k <> {m}[k])
+/\ (forall (t:Text), t <> {m}[k]).
+    
