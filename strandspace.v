@@ -355,61 +355,61 @@ Proof.
 Qed.
 Hint Resolve comm_antisymmetry.
 
-(* predecessor edge *)
+(* successor edge *)
 (* node's direct predecessor -> node -> Prop *)
-Inductive Pred : relation Node :=
-| pred : forall i j, Node_strand i = Node_strand j 
+Inductive Successor : relation Node :=
+| succ : forall i j, Node_strand i = Node_strand j 
                        -> (Node_index i) + 1 = Node_index j 
-                       -> Pred i j.
+                       -> Successor i j.
 (* [REF 1] Definition 2.3.4 pg 6
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
-Lemma pred_dec : forall x y,
-{Pred x y} + {~Pred x y}.
+Lemma succ_dec : forall x y,
+{Successor x y} + {~Successor x y}.
 Proof.
   intros x y.
   remember (Node_index x) as xi. remember (Node_index y) as yi.
   remember (Node_strand x) as xstrand. remember (Node_strand y) as ystrand.
   destruct (eq_strand_dec xstrand ystrand) as [seq | sneq].
   Case "strands eq".
-    destruct (eq_nat_dec yi (S xi)) as [predi | wrongi].
-    SCase "yi = S xi". left. apply (pred x y). rewrite <- Heqxstrand.
+    destruct (eq_nat_dec yi (S xi)) as [succi | wrongi].
+    SCase "yi = S xi". left. apply (succ x y). rewrite <- Heqxstrand.
       rewrite <- Heqystrand.  exact seq. omega.
     SCase "yi <> S xi".
-      right. intros contrapred. apply wrongi. inversion contrapred; subst; omega.
+      right. intros contrasucc. apply wrongi. inversion contrasucc; subst; omega.
   Case "strands neq".
-    right. intros contrapred. apply sneq. inversion contrapred; subst; auto.
+    right. intros contrasucc. apply sneq. inversion contrasucc; subst; auto.
 Qed.  
 
-Theorem pred_irreflexivity : forall n,
-~Pred n n.
+Theorem succ_irreflexivity : forall n,
+~Successor n n.
 Proof.
   intros n edge.
   inversion edge; subst. omega.
 Qed.
-Hint Resolve pred_irreflexivity.
+Hint Resolve succ_irreflexivity.
 
-Theorem pred_antisymmetry :
-Antisymmetric Node Pred.
+Theorem succ_antisymmetry :
+Antisymmetric Node Successor.
 Proof.
   intros n m Hpe1 Hpe2.
   destruct Hpe1. destruct Hpe2.
   rewrite <- H0 in H2. omega.
 Qed.
-Hint Resolve pred_antisymmetry.
+Hint Resolve succ_antisymmetry.
 
-(* predecessor multi edge (not nec. immediate predecessor) *)
-(* node's eventual predecessor -> node -> Prop *)
-Definition PredPath : relation Node := 
-clos_trans Pred.
+(* succecessor multi edge (not nec. immediate succecessor) *)
+(* node's eventual succecessor -> node -> Prop *)
+Definition StrandPath : relation Node := 
+clos_trans Successor.
  (* [REF 1] Definition 2.3.4 pg 6
    "ni =>+ nj means that ni precedes nj (not necessarily immediately) on
     the same strand." *)
 Hint Constructors clos_trans.
 
-Lemma ppath_imp_eq_strand : forall x y,
-PredPath x y -> Node_strand x = Node_strand y.
+Lemma spath_imp_eq_strand : forall x y,
+StrandPath x y -> Node_strand x = Node_strand y.
 Proof.
   intros x y path.
   induction path.
@@ -420,37 +420,37 @@ Proof.
     rewrite IHpath2.
     reflexivity.
 Qed.
-Hint Resolve ppath_imp_eq_strand.
+Hint Resolve spath_imp_eq_strand.
 
-Lemma ppath_imp_index_lt : forall x y,
-PredPath x y -> Node_index x < Node_index y.
+Lemma spath_imp_index_lt : forall x y,
+StrandPath x y -> Node_index x < Node_index y.
 Proof.
   intros x y path.
   induction path.
   Case "step". inversion H; subst. omega.
   Case "trans". omega.
 Qed.
-Hint Resolve ppath_imp_index_lt.
+Hint Resolve spath_imp_index_lt.
 
-Lemma ppath_irreflexivity : forall n,
-~PredPath n n.
+Lemma spath_irreflexivity : forall n,
+~StrandPath n n.
 Proof.
   intros n contra.
-  apply ppath_imp_index_lt in contra.
+  apply spath_imp_index_lt in contra.
   omega.
 Qed.
-Hint Resolve ppath_irreflexivity.
+Hint Resolve spath_irreflexivity.
 
-Theorem ppath_transitivity :
-Transitive Node PredPath.
+Theorem spath_transitivity :
+Transitive Node StrandPath.
 Proof.
   intros i j k Hij Hjk.
-  apply (t_trans Node Pred i j k Hij Hjk).
+  apply (t_trans Node Successor i j k Hij Hjk).
 Qed.
-Hint Resolve ppath_transitivity.
+Hint Resolve spath_transitivity.
 
 Definition SSEdge : relation Node :=
-union Comm Pred.
+union Comm Successor.
 Hint Constructors or.
 
 Lemma ssedge_dec : forall x y,
@@ -461,15 +461,15 @@ Proof.
   Case "Comm x y".
     left. left. exact cxy.
   Case "~Comm x y".
-    destruct (pred_dec x y) as [pxy | nopxy].
-    SCase "Pred x y".
+    destruct (succ_dec x y) as [pxy | nopxy].
+    SCase "Successor x y".
       left. right. exact pxy.
-    SCase "~Pred x y".
+    SCase "~Successor x y".
       right. intros contrass.
        destruct contrass.
        SSCase "false Comm".
          apply nocxy; exact H.
-       SSCase "false Pred".
+       SSCase "false Successor".
          apply nopxy; exact H.
 Qed.
 
@@ -479,7 +479,7 @@ Proof.
   intros n Hedge.
   inversion Hedge; subst; auto.
   eapply (comm_irreflexivity); eauto.
-  eapply (pred_irreflexivity); eauto.
+  eapply (succ_irreflexivity); eauto.
 Qed.
 Hint Resolve ssedge_irreflexivity.
 
@@ -506,8 +506,8 @@ Hint Resolve ssedge_antisymmetry.
 Definition SSPath : relation Node := 
 clos_trans SSEdge.
 
-Theorem ppath_imp_sspath : forall i j,
-PredPath i j -> SSPath i j.
+Theorem spath_imp_sspath : forall i j,
+StrandPath i j -> SSPath i j.
 Proof.
   unfold SSPath.
   intros i j Hpath.
@@ -815,7 +815,7 @@ Subterm t (Node_msg n).
 (* As close to paper def as possible *)
 Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
 (exists t, In Msg I t /\ Node_smsg n = tx t)
-/\ forall n', PredPath n' n -> ~ In Msg I (Node_msg n').
+/\ forall n', StrandPath n' n -> ~ In Msg I (Node_msg n').
  (* [REF 1] Definition 2.3.6 pg 6
    "Suppose I is a set of unsigned terms. The node n is an entrypoint for I
     iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
@@ -832,7 +832,7 @@ exists I, (forall t', Subterm t t' <-> In Msg I t')
 Definition Origin (t:Msg) (n:Node) : Prop :=
 is_tx n
 /\ Subterm t (Node_msg n)
-/\ forall n', PredPath n' n -> ~Subterm t (Node_msg n').
+/\ forall n', StrandPath n' n -> ~Subterm t (Node_msg n').
 
 Lemma Origin_imp_strict_defs : forall I t n,
 (forall t', Subterm t t' <-> In Msg I t') ->
@@ -841,12 +841,12 @@ Origin_with_Ex_Set t n.
 Proof.
   intros I t n Iprop Orig.
   exists I. split. exact Iprop.
-  destruct Orig as [ntx [nsub nopred]].
+  destruct Orig as [ntx [nsub nosucc]].
   split. exists (Node_msg n).
   split. apply Iprop in nsub. exact nsub.
   destruct ntx. erewrite node_smsg_msg_tx. exact H. exact H.
-  intros n' pred contraIn.
-  apply nopred in pred. apply Iprop in contraIn. contradiction.
+  intros n' succ contraIn.
+  apply nosucc in succ. apply Iprop in contraIn. contradiction.
 Qed.
 
 Definition UniqOrigin (t:Msg) : Prop :=
@@ -892,15 +892,15 @@ Proof.
     exact nmin.
   split. exact nistx.
   split. exact tsubn.
-  intros n' predn' contrasub.
+  intros n' succn' contrasub.
   assert (In Node N' n') as n'In.
     apply N'def. split.
     destruct valE as [[pairImpN HInEedge]].
     apply pairImpN. left. 
     assert (SSPath n' n) as npath.
-      apply ppath_imp_sspath. exact predn'.
+      apply spath_imp_sspath. exact succn'.
     destruct (sspath_imp_ssedge_l n' n npath) as [x n'edge].
     exists x. apply HInEedge. exact n'edge. exact contrasub.
   destruct nmin as [nIn2 noprev]. apply (noprev n'). exact n'In.
-  apply ppath_imp_sspath. exact predn'.
+  apply spath_imp_sspath. exact succn'.
 Qed.
