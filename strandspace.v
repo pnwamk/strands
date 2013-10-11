@@ -44,12 +44,20 @@ Hint Resolve eq_key_dec.
 (* message or term *)
 Inductive Msg : Type :=
 | msg_text : Text -> Msg
-| msg_join : Msg -> Msg -> Msg 
-| msg_encr : Key -> Msg -> Msg.
+| msg_key  : Key  -> Msg
+| msg_join : Msg  -> Msg -> Msg 
+| msg_encr : Key  -> Msg -> Msg.
 (* [REF 1] Section 2.1 pg 5 
            Section 2.3 pg 9 *)
 (* [REF 2] pg 4 paragraph 3 (details of encryption and subterms) *)
 Hint Constructors Msg.
+
+
+Notation "(! x )" := (msg_text x). 
+Notation "(# k )" := (msg_key k).
+Notation "x * y" := (msg_join x y) (at level 40, left associativity). 
+Notation "[ m ]^( k ) " := (msg_encr k m).
+
 
 Definition eq_msg_dec : forall x y : Msg,  
   {x = y} + {x <> y}.
@@ -62,13 +70,12 @@ Hint Resolve eq_msg_dec.
 (* subterm -> encompassing term -> Prop *)
 Inductive Subterm : Msg -> Msg -> Prop :=
 | st_refl : forall m, Subterm m m
-(* | stcryp : forall a g, Subterm a g -> Subterm a encrpt(g)  *)
 | st_join_l : forall st l r, 
-               Subterm st l -> Subterm st (msg_join l r)
+               Subterm st l -> Subterm st (l*r)
 | st_join_r : forall st l r, 
-               Subterm st r -> Subterm st (msg_join l r)
+               Subterm st r -> Subterm st (l*r)
 | st_encr : forall st t k, 
-               Subterm st t -> Subterm st (msg_encr k t).
+               Subterm st t -> Subterm st ([t]^(k)).
 (* [REF 1] Section 2.1 pg 6 and Definition 2.11 *)
 Hint Constructors Subterm.
 
@@ -80,6 +87,9 @@ Inductive SMsg : Type :=
    They are defined as a pair, w/ the first member being in {+, -} 
    and the second a signed message. *)
 Hint Constructors SMsg.
+
+Notation "(+ x )" := (tx x).
+Notation "(- x )" := (rx x).
 
 Definition eq_smsg_dec : forall x y : SMsg,  
   {x = y} + {x <> y}.
@@ -102,6 +112,7 @@ Qed.
 Hint Resolve eq_strand_dec.
 
 Definition StrandSet := Ensemble Strand.
+Definition KeySet := Ensemble Key.
 Definition MsgSet := Ensemble Msg.
 Definition SMsgSet := Ensemble SMsg.
 
@@ -144,6 +155,8 @@ Definition Node_index (n:Node) : nat :=
 (* [REF 1] Definition 2.3.2 pg 6
    "If n = <s,i> then index(n) = i." *)
 
+Notation "index( x )" := (Node_index x).
+
 (* strand of a node *)
 Definition Node_strand (n:Node) : Strand :=
   match n with
@@ -152,6 +165,8 @@ Definition Node_strand (n:Node) : Strand :=
   end.
 (* [REF 1] Definition 2.3.2 pg 6
    "If n = <s,i> then ... strand(n) = s." *)
+
+Notation "strand( x )" := (Node_strand x).
 
 (* signed message of a node *)
 Fixpoint Node_smsg_option (n:Node) : (option SMsg) :=
@@ -203,6 +218,8 @@ Definition Node_smsg (n:Node) : SMsg :=
     | exist m _ => m
   end.
 
+Notation "smsg( x )" := (Node_smsg x).
+
 (* unsigned message of a node *)
 Definition Node_msg (n:Node) : Msg :=
   match Node_smsg n with
@@ -213,27 +230,29 @@ Definition Node_msg (n:Node) : Msg :=
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
 
+Notation "msg( x )" := (Node_msg x).
+
 Lemma node_smsg_msg_tx : forall n t,
-Node_smsg n = tx t ->
-Node_msg n = t.
+smsg(n) = (+ t) ->
+msg(n) = t.
 Proof.
   intros n t nsmsg.
   unfold Node_msg. rewrite nsmsg. reflexivity. 
 Qed.
 
 Lemma node_smsg_msg_rx : forall n t,
-Node_smsg n = rx t ->
-Node_msg n = t.
+smsg(n) = (- t) ->
+msg(n) = t.
 Proof.
   intros n t nsmsg.
   unfold Node_msg. rewrite nsmsg. reflexivity. 
 Qed.
 
 Definition is_tx (n:Node) : Prop :=
-exists t, Node_smsg n = tx t.
+exists t, Node_smsg n = (+ t).
 
 Definition is_rx (n:Node) : Prop :=
-exists t, Node_smsg n = rx t.
+exists t, Node_smsg n = (- t).
 
 Definition eq_node_dec : forall x y : Node,
  {x = y} + {x <> y}.
@@ -258,7 +277,7 @@ Proof.
 Qed.
 
 Lemma node_imp_strand_nonempty : forall s n,
-Node_strand n = s ->
+strand(n) = s ->
 length s > 0.
 Proof.
   intros s n Hns.
@@ -291,8 +310,10 @@ Hint Constructors Comm.
   may send or receive a message but not both at the 
   same time". *)
 
+Notation "a --> b" := (Comm a b) (at level 30, right associativity). 
+
 Lemma comm_dec : forall x y,
-{Comm x y} + {~ Comm x y}.
+{x --> y} + {~ x --> y}.
 Proof.
   intros x y.
   remember (Node_smsg x) as xsmsg. remember (Node_smsg y) as ysmsg.
@@ -330,7 +351,7 @@ Proof.
 Qed.
 
 Theorem comm_irreflexivity : forall n,
-~ Comm n n.
+~ n --> n.
 Proof.
   intros n contraedge.
   inversion contraedge; subst.
@@ -365,8 +386,10 @@ Inductive Successor : relation Node :=
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
+Notation "a ==> b" := (Successor a b)  (at level 30, right associativity). 
+
 Lemma succ_dec : forall x y,
-{Successor x y} + {~Successor x y}.
+{x ==> y} + {~ x ==> y}.
 Proof.
   intros x y.
   remember (Node_index x) as xi. remember (Node_index y) as yi.
@@ -383,7 +406,7 @@ Proof.
 Qed.  
 
 Theorem succ_irreflexivity : forall n,
-~Successor n n.
+~n ==> n.
 Proof.
   intros n edge.
   inversion edge; subst. omega.
@@ -408,8 +431,10 @@ clos_trans Successor.
     the same strand." *)
 Hint Constructors clos_trans.
 
+Notation "a ==>+ b" := (StrandPath a b)  (at level 30, right associativity). 
+
 Lemma spath_imp_eq_strand : forall x y,
-StrandPath x y -> Node_strand x = Node_strand y.
+x ==>+ y -> strand(x) = strand(y).
 Proof.
   intros x y path.
   induction path.
@@ -423,7 +448,7 @@ Qed.
 Hint Resolve spath_imp_eq_strand.
 
 Lemma spath_imp_index_lt : forall x y,
-StrandPath x y -> Node_index x < Node_index y.
+x ==>+ y -> index(x) < index(y).
 Proof.
   intros x y path.
   induction path.
@@ -433,7 +458,7 @@ Qed.
 Hint Resolve spath_imp_index_lt.
 
 Lemma spath_irreflexivity : forall n,
-~StrandPath n n.
+~ n ==>+ n.
 Proof.
   intros n contra.
   apply spath_imp_index_lt in contra.
@@ -453,8 +478,10 @@ Definition SSEdge : relation Node :=
 union Comm Successor.
 Hint Constructors or.
 
+Notation "a =-> b" := (SSEdge a b) (at level 30, right associativity). 
+
 Lemma ssedge_dec : forall x y,
-{SSEdge x y} + {~SSEdge x y}.
+{x =-> y} + {~x =-> y}.
 Proof.
   intros x y.
   destruct (comm_dec x y) as [cxy | nocxy].
@@ -474,7 +501,7 @@ Proof.
 Qed.
 
 Theorem ssedge_irreflexivity : forall n,
-~SSEdge n n.
+~ n =-> n.
 Proof.
   intros n Hedge.
   inversion Hedge; subst; auto.
@@ -506,8 +533,10 @@ Hint Resolve ssedge_antisymmetry.
 Definition SSPath : relation Node := 
 clos_trans SSEdge.
 
+Notation "a << b" := (SSPath a b) (at level 30, right associativity). 
+
 Theorem spath_imp_sspath : forall i j,
-StrandPath i j -> SSPath i j.
+i ==>+ j -> i << j.
 Proof.
   unfold SSPath.
   intros i j Hpath.
@@ -529,8 +558,10 @@ Definition SSPathEq : relation Node :=
 clos_refl_trans SSEdge.
 Hint Constructors clos_refl_trans.
 
+Notation "a <<* b" := (SSPathEq a b) (at level 30, right associativity). 
+
 Theorem sspatheq_opts: forall n m,
-SSPathEq n m -> SSPath n m \/ n = m.
+n <<* m -> n << m \/ n = m.
 Proof.
   intros n m Hpatheq.
   induction Hpatheq.
@@ -571,25 +602,25 @@ Inductive ValidEdges (N: NodeSet) (E: EdgeSet) : Prop :=
     (* N is the set of nodes incident with any edge in E *)
     (and (forall x, InPair E x -> In Node N x)
     (* edges and the SSEdge property are equivalent *)
-         (forall x y, In Edge E (x,y) <-> SSEdge x y))
+         (forall x y, In Edge E (x,y) <-> x =-> y))
     -> ValidEdges N E.
 (* TODO justification *)
 
 Definition ExistsUniqueTx (N:NodeSet) (E:EdgeSet) : Prop :=
   (forall z m, In Node N z ->
-              Node_smsg z = rx m -> 
+              smsg(z) = (- m) -> 
               (* there exists a transmitter *)
-              (exists x, (Node_smsg x = tx m
-                          /\ Comm x z
+              (exists x, (smsg(x) = (+ m)
+                          /\ x --> z
                           /\ In Edge E (x,z)))
               (* a transmitter is unique *)
-              /\ (forall x y, Comm x z ->
-                              Comm y z ->
+              /\ (forall x y, x --> z ->
+                              y --> z ->
                               x = y)).
 (* TODO justification *)
 
 Definition Acyclic (N:NodeSet) (E:EdgeSet) : Prop :=
-forall x, ~ SSPath x x.
+forall x, ~ x << x.
 (* TODO justification *)
 
 Definition Bundle (N:NodeSet) (E:EdgeSet) : Prop :=
@@ -601,7 +632,7 @@ Definition Bundle (N:NodeSet) (E:EdgeSet) : Prop :=
 
 Lemma bundle_ssedge_inclusion : forall N E n m,
 Bundle N E ->
-SSEdge n m ->
+n =-> m ->
 (In Node N n -> In Node N m) /\ (In Node N m -> In Node N n).
 Proof.
   intros N E n m B ssedge. split; intros Hin.
@@ -617,8 +648,8 @@ Definition bundle_set (s: ListSet.set Node) (N:NodeSet) : Prop :=
 forall x, ListSet.set_In x s <-> In Node N x.
              
 Lemma sspath_imp_ssedge_l : forall x y,
-SSPath x y ->
-exists x', SSEdge x x'.
+x << y ->
+exists x', x =-> x'.
 Proof.
   intros x y sspath.
   induction sspath.
@@ -627,8 +658,8 @@ Proof.
 Qed.  
 
 Lemma sspath_imp_ssedge_r : forall x y,
-SSPath x y ->
-exists y', SSEdge y' y.
+x << y ->
+exists y', y'=->  y.
 Proof.
   intros x y sspath.
   induction sspath.
@@ -661,7 +692,7 @@ Lemma sspath_dec : forall N E s,
 Bundle N E ->
 bundle_set s N ->
 is_restricted SSEdge s ->
-forall x y, {SSPath x y} + {~SSPath x y}.
+forall x y, {x << y} + {~x << y}.
 Proof.
   intros N E s B bset restrict.
   destruct B as [finN [finE [valE [uniqtx acyc]]]].
@@ -675,8 +706,8 @@ Qed.
 
 Lemma neq_sspatheq_imp_sspath : forall x y,
 x <> y ->
-SSPathEq x y ->
-SSPath x y.
+x <<* y ->
+x << y.
 Proof.
   intros x y neq patheqxy.
   induction patheqxy.
@@ -695,9 +726,9 @@ Qed.
 
 Lemma sspatheq_trans_cycle : forall x y,
 x <> y ->
-SSPathEq x y ->
-SSPathEq y x ->
-SSPath x x.
+x <<* y ->
+y <<* x ->
+x << x.
 Proof.
   intros x y neq patheqxy patheqyx.
   eapply t_trans.
@@ -726,7 +757,7 @@ Proof.
     destruct (eq_node_dec x y) as [xyeq | xyneq].
     SCase "x = y". exact xyeq.
     SCase "x <> y". 
-      assert (SSPath x x) as contraxx.
+      assert (x << x) as contraxx.
         eapply sspatheq_trans_cycle. exact xyneq.
         exact xy. exact yz. apply acyc in contraxx. inversion contraxx.
 Qed.
@@ -747,7 +778,7 @@ Qed.
 Definition set_minimal (N:NodeSet) (n:Node) : Prop :=
 In Node N n /\
 (forall x, In Node N x ->
-           ~ SSPath x n).
+           ~ x << n).
 
 Lemma bundle_subset_minimal : forall N E N',
 Bundle N E ->
@@ -764,7 +795,7 @@ Proof.
   destruct n. inversion card. rewrite H in nempty.
   assert False as F. apply nempty. reflexivity. inversion F.
   destruct (restricted_to_set N E bundle) as [s [restricted setequiv]].
-  assert (forall x y, {SSPath x y} + {~ SSPath x y}) as rdec.
+  assert (forall x y, {x << y} + {~ x << y}) as rdec.
   apply (sspath_dec N E s bundle). exact setequiv. exact restricted.  
   destruct (minimal_finite_ensemble_mem 
               Node 
@@ -784,7 +815,7 @@ Bundle N E ->
 Included Node N' N ->
 (forall m m', (In Node N m 
                /\ In Node N m'
-               /\ Node_msg m = Node_msg m') -> (* ADDED in N condition *)
+               /\ msg(m) = msg(m')) -> (* ADDED in N conditions *)
                (In Node N' m <-> In Node N' m')) ->
 forall n, set_minimal N' n ->
 is_tx n.
@@ -814,8 +845,8 @@ Subterm t (Node_msg n).
 
 (* As close to paper def as possible *)
 Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
-(exists t, In Msg I t /\ Node_smsg n = tx t)
-/\ forall n', StrandPath n' n -> ~ In Msg I (Node_msg n').
+(exists t, In Msg I t /\ smsg(n) = (+ t))
+/\ forall n', n' << n -> ~ In Msg I (Node_msg n').
  (* [REF 1] Definition 2.3.6 pg 6
    "Suppose I is a set of unsigned terms. The node n is an entrypoint for I
     iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
@@ -832,7 +863,7 @@ exists I, (forall t', Subterm t t' <-> In Msg I t')
 Definition Origin (t:Msg) (n:Node) : Prop :=
 is_tx n
 /\ Subterm t (Node_msg n)
-/\ forall n', StrandPath n' n -> ~Subterm t (Node_msg n').
+/\ forall n', n' << n -> ~Subterm t (Node_msg n').
 
 Lemma Origin_imp_strict_defs : forall I t n,
 (forall t', Subterm t t' <-> In Msg I t') ->
@@ -896,20 +927,16 @@ Proof.
   assert (In Node N' n') as n'In.
     apply N'def. split.
     destruct valE as [[pairImpN HInEedge]].
-    apply pairImpN. left. 
-    assert (SSPath n' n) as npath.
-      apply spath_imp_sspath. exact succn'.
-    destruct (sspath_imp_ssedge_l n' n npath) as [x n'edge].
+    apply pairImpN. left.
+    destruct (sspath_imp_ssedge_l n' n succn') as [x n'edge].
     exists x. apply HInEedge. exact n'edge. exact contrasub.
   destruct nmin as [nIn2 noprev]. apply (noprev n'). exact n'In.
-  apply spath_imp_sspath. exact succn'.
+  exact succn'.
 Qed.
 
-Notation " x | y " := (msg_join x y) (at level 60, right associativity). 
-Notation " { m }[ k ] " := (msg_encr k m).
-
-Theorem free_encryption : forall m m' k k',
-{m}[k] = {m'}[k'] -> m = m' /\ k = k'.
+(* Axiom 1 *)
+Theorem free_encryption : forall m1 m2 k1 k2,
+[m1]^(k1) = [m2]^(k2) -> m1 = m2 /\ k1 = k2.
 Proof.
   intros m m' k k' encreq.
   inversion encreq. split; auto. 
@@ -923,13 +950,85 @@ Qed.
    inherently implied by the definitions/structures
 *)
 
-(* BROKEN - type conflicts with the way
-   we've defined Texts, Keys, and Msgs... *)
-Theorem free_term_algebra : forall m m' n n' k k',
-(m | n = m' | n' -> m = m' /\ n = n')
-/\ (m | n <> {m'}[k])
-/\ (forall (k:Key), k <> m | n)
-/\ (forall (t:Text), t <> m | n)
-/\ (forall (k:Key), k <> {m}[k])
-/\ (forall (t:Text), t <> {m}[k]).
-    
+(* Axiom 2 *)
+Theorem free_term_algebra : forall m m' n n' k k' t,
+(m * n = m' * n' -> m = m' /\ n = n')
+/\ m * n <> [m']^(k)
+/\ (#k) <> m * n
+/\ (!t) <> m * n
+/\ (#k) <> [m]^(k')
+/\ (!t) <> [m]^(k).
+Proof.
+  intros m m' n n' k k' t;
+  split. intros eq. inversion eq; auto. 
+  split. intros F. inversion F.
+  split. intros F. inversion F.
+  split. intros F. inversion F.
+  split. intros F. inversion F.
+  intros F. inversion F.
+Qed.
+
+Fixpoint msg_width (m:Msg) : nat :=
+match m with
+| msg_text _ => 1
+| msg_key _ => 1
+| msg_encr _  _ => 1
+| msg_join x y => msg_width x + msg_width y
+end.
+(* [REF 1] Definition 2.10 *)
+
+Notation "width( m )" := (msg_width m).
+
+(* Proposition 2.12 *)
+Lemma encr_subterm_imp : forall k k' h h',
+k <> k' ->
+Subterm [h']^(k') [h]^(k) ->
+Subterm [h']^(k') h.
+Proof.
+  intros k k' h h' kneq st.
+  inversion st; subst.
+  assert False. apply kneq. reflexivity. contradiction.
+  exact H1.
+Qed.
+
+Definition PrincipalAlignment := Strand -> Prop.
+Variable Regular : PrincipalAlignment.
+Variable Inv : relation Key.
+
+
+Inductive Penetrator : KeySet -> PrincipalAlignment :=
+| M : forall K s g, 
+        ~Regular s ->
+        s = [(+g)] -> 
+        Penetrator K s
+| F : forall K s g, 
+        ~Regular s ->
+        s = [(-g)] -> 
+        Penetrator K s
+| T : forall K s g, 
+        ~Regular s ->
+        s = [(-g), (+g), (+g)] ->
+        Penetrator K s
+| C : forall K s g h, 
+        ~Regular s ->
+        s = [(-g), (-h), (+g*h)] ->
+        Penetrator K s
+| S : forall K s g h, 
+        ~Regular s ->
+        s = [(-g*h), (+g), (+h)] ->
+        Penetrator K s
+| K : forall K s k, 
+        ~Regular s ->
+        In Key K k ->
+        s = [(+ (#k))] ->
+        Penetrator K s
+| E : forall K s h k,
+        ~Regular s ->
+        s = [(- (#k)), (-h), (+ [h]^(k))] ->
+        Penetrator K s
+| D : forall K s h k k',
+        ~Regular s ->
+        Inv k' k ->
+        s = [(- (#k')), (- [h]^(k)), (+h)] ->
+        Penetrator K s.
+
