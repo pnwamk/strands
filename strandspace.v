@@ -267,8 +267,8 @@ Proof.
 Qed.
 
 Lemma eq_nodes : forall x y : Node,
-Node_index x = Node_index y ->
-Node_strand x = Node_strand y ->
+index(x) = index(y) ->
+strand(x) = strand(y) ->
 x = y.
 Proof.
   intros [[xs xn] xp] [[ys yn] yp] eq_index eq_strand.
@@ -296,9 +296,9 @@ Proof.
 Qed.
 
 Inductive Comm : relation Node :=
-| comm :  forall n m t, ((Node_smsg n = tx t 
-                                    /\ Node_smsg m = rx t)
-                        /\ Node_strand n <> Node_strand m)
+| comm :  forall n m t, ((smsg(n) = (+t) 
+                          /\ smsg(m) = (-t))
+                         /\ strand(n) <> strand(m))
                         -> Comm n m.
 Hint Constructors Comm.
 (* [REF 1] Definition 2.3.3 pg 6
@@ -379,8 +379,8 @@ Hint Resolve comm_antisymmetry.
 (* successor edge *)
 (* node's direct predecessor -> node -> Prop *)
 Inductive Successor : relation Node :=
-| succ : forall i j, Node_strand i = Node_strand j 
-                       -> (Node_index i) + 1 = Node_index j 
+| succ : forall i j, strand(i) = strand(j) 
+                       -> index(i) + 1 = index(j) 
                        -> Successor i j.
 (* [REF 1] Definition 2.3.4 pg 6
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
@@ -659,7 +659,7 @@ Qed.
 
 Lemma sspath_imp_ssedge_r : forall x y,
 x << y ->
-exists y', y'=->  y.
+exists y', y' =->  y.
 Proof.
   intros x y sspath.
   induction sspath.
@@ -839,14 +839,14 @@ Proof.
 Qed.
 
 Definition OccursIn (t:Msg) (n:Node) : Prop :=
-Subterm t (Node_msg n).
+Subterm t msg(n).
  (* [REF 1] Definition 2.3.5 pg 6
    "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
 
 (* As close to paper def as possible *)
 Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
 (exists t, In Msg I t /\ smsg(n) = (+ t))
-/\ forall n', n' << n -> ~ In Msg I (Node_msg n').
+/\ forall n', n' << n -> ~ In Msg I msg(n').
  (* [REF 1] Definition 2.3.6 pg 6
    "Suppose I is a set of unsigned terms. The node n is an entrypoint for I
     iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
@@ -862,8 +862,8 @@ exists I, (forall t', Subterm t t' <-> In Msg I t')
 
 Definition Origin (t:Msg) (n:Node) : Prop :=
 is_tx n
-/\ Subterm t (Node_msg n)
-/\ forall n', n' << n -> ~Subterm t (Node_msg n').
+/\ Subterm t msg(n)
+/\ forall n', n' << n -> ~Subterm t msg(n').
 
 Lemma Origin_imp_strict_defs : forall I t n,
 (forall t', Subterm t t' <-> In Msg I t') ->
@@ -891,7 +891,7 @@ exists n, Origin t n
 Lemma min_origin : forall N E N' n t,
 Bundle N E ->
 (forall m, (In Node N m 
-           /\ Subterm t (Node_msg m)) <-> 
+           /\ Subterm t msg(m)) <-> 
            In Node N' m) ->
 set_minimal N' n ->
 Origin t n.
@@ -934,7 +934,7 @@ Proof.
   exact succn'.
 Qed.
 
-(* Axiom 1 *)
+(* Axiom 1 -- provable in this context *)
 Theorem free_encryption : forall m1 m2 k1 k2,
 [m1]^(k1) = [m2]^(k2) -> m1 = m2 /\ k1 = k2.
 Proof.
@@ -950,7 +950,7 @@ Qed.
    inherently implied by the definitions/structures
 *)
 
-(* Axiom 2 *)
+(* Axiom 2 -- provable in this context *)
 Theorem free_term_algebra : forall m m' n n' k k' t,
 (m * n = m' * n' -> m = m' /\ n = n')
 /\ m * n <> [m']^(k)
@@ -995,38 +995,37 @@ Definition PrincipalAlignment := Strand -> Prop.
 Variable Regular : PrincipalAlignment.
 Variable Inv : relation Key.
 
-
 Inductive Penetrator : KeySet -> PrincipalAlignment :=
-| M : forall K s g, 
+| pM : forall K s g, 
         ~Regular s ->
         s = [(+g)] -> 
         Penetrator K s
-| F : forall K s g, 
+| pF : forall K s g, 
         ~Regular s ->
         s = [(-g)] -> 
         Penetrator K s
-| T : forall K s g, 
+| pT : forall K s g, 
         ~Regular s ->
         s = [(-g), (+g), (+g)] ->
         Penetrator K s
-| C : forall K s g h, 
+| pC : forall K s g h, 
         ~Regular s ->
         s = [(-g), (-h), (+g*h)] ->
         Penetrator K s
-| S : forall K s g h, 
+| pS : forall K s g h, 
         ~Regular s ->
         s = [(-g*h), (+g), (+h)] ->
         Penetrator K s
-| K : forall K s k, 
+| pK : forall K s k, 
         ~Regular s ->
         In Key K k ->
         s = [(+ (#k))] ->
         Penetrator K s
-| E : forall K s h k,
+| pE : forall K s h k,
         ~Regular s ->
         s = [(- (#k)), (-h), (+ [h]^(k))] ->
         Penetrator K s
-| D : forall K s h k k',
+| pD : forall K s h k k',
         ~Regular s ->
         Inv k' k ->
         s = [(- (#k')), (- [h]^(k)), (+h)] ->
