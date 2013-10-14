@@ -1,14 +1,23 @@
 (strandspace.v)
 * Strand Spaces: Proving Security Protocols Correct
 (http://web.cs.wpi.edu/~guttman/pubs/jcs_strand_spaces.pdf)
+
+COMPLETED
+
 ** Strand Space General Theorems
 ***[X] Lemma 2.7a | partial order of edges in a bundle
 ***[X] Lemma 2.7b | non-empty subsets of bundle's nodes have edge-minimal members
 ***[X] Lemma 2.8 | minimal members are tx-ers
 ***[X] Lemma 2.9 | originating node for subterms
 ***[X] Proposition 2.12 | encrypted subterms
+
+IN PROGRESS
+
 ** Penetrator Theorems
 ***[] Proposition 3.3 | non-penetrator reys that are not broadcast are never subterms
+
+TO DO
+
 ** NSL Protocol Theorems: Responders Guarantee
 ***[] Proposition 5.2 | NSL bundle contains a specific initiator strand
 ***[] Lemma 5.3 | where Nb originates in NSL
