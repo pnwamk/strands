@@ -1102,10 +1102,12 @@ Proof.
   intros B k notInKp noOrigin n nInN st.
   eapply noOrigin.
   unfold Origin.
+  Admitted. (* TODO - proof in progress *)
 
 Theorem non_subterm_incl_penetrators : forall B k,
 (forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)) ->
 (forall p, In Node (Nodes B) p -> 
               PenetratorNode p ->
               ~ (#k) <st msg(p)).
+  Admitted. (* TODO - proof in progress *)
 
