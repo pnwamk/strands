@@ -1,8 +1,10 @@
 (strandspace.v)
-* Strand Spaces: Proving Security Protocols Correct
-(http://web.cs.wpi.edu/~guttman/pubs/jcs_strand_spaces.pdf)
+* Fábrega, F. Javier Thayer, Jonathan C. Herzog, and Joshua D. Guttman. 
+    "Strand spaces: Proving security protocols correct." 
+    Journal of computer security 7.2 (1999): 191-230.
 
 COMPLETED
+(these are proven and labeled in the given file)
 
 ** Strand Space General Theorems
 ***[X] Lemma 2.7a | partial order of edges in a bundle
@@ -12,11 +14,13 @@ COMPLETED
 ***[X] Proposition 2.12 | encrypted subterms
 
 IN PROGRESS
+(this is the next theorem to be proven)
 
 ** Penetrator Theorems
 ***[] Proposition 3.3 | non-penetrator reys that are not broadcast are never subterms
 
 TO DO
+(these are planned, but likely not yet recorded/stated in the file explicitly)
 
 ** NSL Protocol Theorems: Responders Guarantee
 ***[] Proposition 5.2 | NSL bundle contains a specific initiator strand
