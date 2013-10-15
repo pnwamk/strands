@@ -26,3 +26,6 @@ strictorder.v
 
 util.v
 - This just contains some convenient notation I feel clarifies work in proofs (the "Case", "SCase" notation, mainly).
+
+strandspace.v
+- This contains the definitions and theorems/proofs directly related to Strand Spaces, Bundles, etc...
