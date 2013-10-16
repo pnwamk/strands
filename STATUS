@@ -12,12 +12,12 @@ COMPLETED
 ***[X] Lemma 2.8 | minimal members are tx-ers
 ***[X] Lemma 2.9 | originating node for subterms
 ***[X] Proposition 2.12 | encrypted subterms
+** Penetrator Theorems
+***[] Proposition 3.3 | non-penetrator keys that are not broadcast are never subterms
 
 IN PROGRESS
 (this is the next theorem to be proven)
 
-** Penetrator Theorems
-***[] Proposition 3.3 | non-penetrator reys that are not broadcast are never subterms
 
 TO DO
 (these are planned, but likely not yet recorded/stated in the file explicitly)
