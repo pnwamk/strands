@@ -18,8 +18,11 @@
  *)
 Require Import Logic List Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
-Require Import Relation_Operators strictorder util.
+Require Import Relation_Operators.
 Require Import CoLoRRelDec CoLoRRelSub.
+Require Import strictorder set_rep_equiv util.
+Require Import finite_set_builder.
+
 
 Definition FiniteSet {X:Type} (E:Ensemble X) : Prop :=
 Finite X E.
@@ -44,7 +47,7 @@ Hint Resolve eq_key_dec.
    that includes names and public keys which are
    associated with a specific name.*)
 
-(* message or term *)
+(* message or text, comprising the set of terms "A" *)
 Inductive Msg : Type :=
 | msg_text : Text -> Msg
 | msg_key  : Key  -> Msg
@@ -290,6 +293,43 @@ Proof.
     assert (s0 = s). auto.
     rewrite <- H.
     omega.
+Qed.
+
+Lemma index_len_node : forall n,
+(index n) < length (strand n).
+Proof.
+  intros n.
+  destruct n. simpl. omega.
+Qed.
+
+Lemma node_indexing_equiv : forall n,
+nth_error (strand n) (index n) = Some (smsg n).
+Proof.
+  intros n.
+  unfold smsg. destruct node_smsg_valid. 
+  destruct n. simpl in *.
+  destruct x0.
+  rewrite e. simpl. reflexivity.
+Qed.
+(*
+Fixpoint get_nth_option_node 
+           (n orign:nat) (s origs:Strand) : option Node :=
+match s , n with
+| nil , _ => None
+| f :: rest, O => exist _ origs _ _
+| f :: rest, S n' => get_nth_option_node n' orign rest origs
+end.
+*)
+
+Lemma strand_node : forall (s: Strand) (i: nat),
+i < length s ->
+exists n, strand n = s /\ index n = i.
+Proof.
+  intros s i len.  
+  eexists (exist _ (s,i) _). simpl.
+  split; reflexivity.
+Grab Existential Variables.
+  simpl. exact len.
 Qed.
 
 Inductive Comm : relation Node :=
@@ -1040,6 +1080,12 @@ Penetrator (strand(n)).
 Definition RegularNode (n:Node) : Prop :=
 Regular (strand(n)).
 
+Axiom AlignmentAxiom : forall s, 
+{Regular s /\ ~ Penetrator s}+{~ Regular s /\ Penetrator s}.
+(* TODO - there's got to be a more elegant/natural way
+          of seperating out strand alignment. *)
+
+
 Lemma st_dec : forall a b,
 {a <st b} + {~ a <st b}.
 Proof.
@@ -1100,14 +1146,288 @@ Theorem non_origin_imp_non_subterm : forall B k,
 (forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)).
 Proof.
   intros B k notInKp noOrigin n nInN st.
-  eapply noOrigin.
-  unfold Origin.
-  Admitted. (* TODO - proof in progress *)
+  remember B as bundle.
+  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
+  assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
+  clear Heqbundle.
+  assert (forall x : Node, {(#k) <st msg x} + {~ (#k) <st msg x})
+         as Pdec.
+    intros x. apply st_dec.    
+  destruct (ex_filter_ensemble 
+              Node 
+              eq_node_dec 
+              (fun n => (#k) <st (msg n)) 
+              Pdec
+              N 
+              finN) 
+    as [N' [inclN' N'memP]].
+  assert (FiniteSet N') as finN'. eapply Finite_downward_closed.
+    exact finN. exact inclN'.
+  destruct finN' as [| N' fin x].
+  Case "Empty_set".
+    assert (In Node (Empty_set Node) n) as  contra.
+      apply N'memP. split. exact nInN. exact st.
+    inversion contra.
+  Case "non-empty".
+    assert (exists min, set_minimal (Add Node N' x) min) as exmin.
+      eapply (bundle_subset_minimal B). rewrite <- NB. exact inclN'.
+      intros contra. apply Add_not_Empty in contra. contradiction.
+    destruct exmin as [min minP].
+    assert (Origin (#k) min) as minorg.
+      eapply (min_origin B (Add Node N' x)). split.
+      intros [mIn mst].
+      apply N'memP. split. rewrite NB. exact mIn. exact mst.
+      intros mIn. split.
+      apply inclN' in mIn. rewrite <- NB. exact mIn.
+      apply N'memP in mIn. destruct mIn; auto. exact minP.
+    destruct (AlignmentAxiom (strand min)) as [[reg notpen] | [notreg pen]].
+    eapply noOrigin. exact minorg. exact reg.
+    destruct minorg as [istx [minst prednost]].
+    inversion pen.
+    SCase "M".
+      assert (length (strand min) = 1). rewrite H2. auto.
+      assert ((index min) = 0). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+      apply node_indexing_equiv. 
+      rewrite H2 in H6. rewrite H5 in H6. simpl in H6.
+      inversion H6. 
+      assert (msg min = (!t)) as minmsg.
+      apply node_smsg_msg_tx; auto. rewrite minmsg in minst. 
+      inversion minst.
+    SCase "F".
+      assert (length (strand min) = 1). rewrite H1. auto.
+      assert ((index min) = 0). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+      apply node_indexing_equiv. 
+      rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+      inversion H5. destruct istx. rewrite <- H7 in H6.
+      inversion H6.
+    SCase "T".
+      assert (length (strand min) = 3). rewrite H1. auto.
+      assert ((index min) = 0 
+              \/ (index min) = 1 
+              \/ (index min) = 2). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+      apply node_indexing_equiv. 
+      destruct H4.
+      SSCase "index min = 0".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      destruct H4.
+      SSCase "index min = 1".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. 
+        assert (msg min = g) as minmsg.
+        apply node_smsg_msg_tx; auto. rewrite minmsg in minst.
+        destruct (strand_node (strand min) 0) as [y [ys yi]].
+          rewrite H1. simpl; auto. 
+        assert (y << min) as ypremin. constructor.
+          constructor 2. constructor. rewrite ys. reflexivity.
+          omega.
+        apply prednost in ypremin.
+        assert (nth_error (strand min) (index y) = Some (smsg y)).
+          rewrite <- ys.
+        apply node_indexing_equiv. rewrite H1 in H6. rewrite yi in H6.
+        simpl in H6. inversion H6. symmetry in H9. 
+        eapply node_smsg_msg_rx in H9. rewrite H9 in ypremin.
+        contradiction.
+      SSCase "index min = 2".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. 
+        assert (msg min = g) as minmsg.
+        apply node_smsg_msg_tx; auto. rewrite minmsg in minst.
+        destruct (strand_node (strand min) 1) as [y [ys yi]].
+          rewrite H1. simpl; auto. 
+        assert (y << min) as ypremin. constructor.
+          constructor 2. constructor. rewrite ys. reflexivity.
+          omega.
+        apply prednost in ypremin.
+        assert (nth_error (strand min) (index y) = Some (smsg y)).
+          rewrite <- ys.
+        apply node_indexing_equiv. rewrite H1 in H6. rewrite yi in H6.
+        simpl in H6. inversion H6. symmetry in H9. 
+        eapply node_smsg_msg_tx in H9. rewrite H9 in ypremin.
+        contradiction.      
+    SCase "C".
+      assert (length (strand min) = 3). rewrite H1. auto.
+      assert ((index min) = 0 
+              \/ (index min) = 1 
+              \/ (index min) = 2). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+      apply node_indexing_equiv. 
+      destruct H4.
+      SSCase "index min = 0".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      destruct H4.
+      SSCase "index min = 1".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      SSCase "index min = 2".
+        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
+          rewrite H1. simpl; auto. 
+        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
+          rewrite H1. simpl; auto. 
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. symmetry in H7. apply node_smsg_msg_tx in H7.
+        rewrite H7 in minst.
+        inversion minst. 
+        SSSCase "#k <st g".
+          assert (n0 << min) as n0pred. econstructor 2. constructor. 
+            constructor 2. constructor. rewrite n0s. symmetry in n1s. 
+            exact n1s. omega. constructor. constructor 2. constructor. 
+            exact n1s. omega.
+          apply prednost in n0pred. 
+          assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
+            apply node_indexing_equiv.
+          rewrite n0i in H11. rewrite n0s in H11. rewrite H1 in H11.
+          simpl in H11. inversion H11. symmetry in H13.
+          apply node_smsg_msg_rx in H13. rewrite H13 in n0pred.
+          contradiction.
+        SSSCase "#k <st h".
+          assert (n1 << min) as n1pred. econstructor. constructor 2. 
+            constructor. auto. omega.
+          apply prednost in n1pred.
+          assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
+            apply node_indexing_equiv.
+          rewrite n1s in H11. rewrite n1i in H11. rewrite H1 in H11.
+          simpl in H11. inversion H11. symmetry in H13.
+          apply node_smsg_msg_rx in H13.
+          rewrite H13 in n1pred. contradiction.
+    SCase "S".
+      assert (length (strand min) = 3). rewrite H1. auto.
+      assert ((index min) = 0 
+              \/ (index min) = 1 
+              \/ (index min) = 2). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+      apply node_indexing_equiv. 
+      destruct H4.
+      SSCase "index min = 0".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      destruct H4.
+      SSCase "index min = 1".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
+          rewrite H1. simpl; auto. 
+        assert (n0 << min) as n0pred. econstructor. constructor 2. 
+          constructor. auto. omega.
+        apply prednost in n0pred.
+        assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
+          apply node_indexing_equiv.
+        rewrite n0s in H6. rewrite n0i in H6. rewrite H1 in H6.
+        simpl in H6. inversion H6. symmetry in H8.
+        apply node_smsg_msg_rx in H8. rewrite H8 in n0pred.
+        assert (nth_error (strand min) (index min) = Some (smsg min)). 
+          apply node_indexing_equiv.
+         rewrite H1 in H7. rewrite H4 in H7. simpl in H7.
+         inversion H7. symmetry in H10. apply node_smsg_msg_tx in H10.
+         rewrite H10 in minst.
+         apply n0pred. constructor. exact minst.
+      SSCase "index min = 2".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
+          rewrite H1. simpl; auto. 
+        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
+          rewrite H1. simpl; auto. 
+        assert (n0 << min) as n0pred. apply (t_trans Node SSEdge n0 n1 min). 
+          constructor. constructor 2. constructor. rewrite n0s. 
+          auto. omega. constructor. constructor 2. constructor.
+          exact n1s. omega.
+        apply prednost in n0pred.
+        assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
+          apply node_indexing_equiv.
+        rewrite n0s in H6. rewrite n0i in H6. rewrite H1 in H6.
+        simpl in H6. inversion H6. symmetry in H8.
+        apply node_smsg_msg_rx in H8. rewrite H8 in n0pred.
+        assert (nth_error (strand min) (index min) = Some (smsg min)). 
+          apply node_indexing_equiv.
+         rewrite H1 in H7. rewrite H4 in H7. simpl in H7.
+         inversion H7. symmetry in H10. apply node_smsg_msg_tx in H10.
+         rewrite H10 in minst.
+         apply n0pred. constructor 3. exact minst.
+    SCase "K".
+      destruct (eq_key_dec k k0); subst. contradiction.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+        apply node_indexing_equiv.
+      rewrite H2 in H3. 
+      assert (length (strand min) = 1). rewrite H2. auto.
+      assert ((index min) = 0). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+        apply node_indexing_equiv.
+      rewrite H2 in H6. rewrite H5 in H6. simpl in H6.
+      inversion H6. symmetry in H8. apply node_smsg_msg_tx in H8.
+      rewrite H8 in minst.
+      inversion minst. contradiction.      
+    SCase "E".
+      assert (length (strand min) = 3). rewrite H1. auto.
+      assert ((index min) = 0 
+              \/ (index min) = 1 
+              \/ (index min) = 2). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+        apply node_indexing_equiv. 
+      destruct H4.
+      SSCase "index min = 0".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      destruct H4.
+      SSCase "index min = 1".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. destruct istx. rewrite <- H7 in H6.
+        inversion H6.
+      SSCase "index min = 2".
+        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
+        inversion H5. symmetry in H7. apply node_smsg_msg_tx in H7.
+        rewrite H7 in minst.
+        inversion minst; subst.
+        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
+          rewrite H1. simpl; auto.  
+        assert (n1 << min) as n1pre. constructor. constructor 2.
+          constructor. auto. omega.
+        apply prednost in n1pre.
+        assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
+          apply node_indexing_equiv.        
+        rewrite n1s in H2. rewrite H1 in H2. rewrite n1i in H2. 
+        simpl in H2. inversion H2. symmetry in H8.
+        apply node_smsg_msg_rx in H8. rewrite H8 in n1pre.
+        contradiction.
+    SCase "D".
+      assert (length (strand min) = 3). rewrite H2. auto.
+      assert ((index min) = 0 
+              \/ (index min) = 1 
+              \/ (index min) = 2). remember (index_len_node min); omega.
+      assert (nth_error (strand min) (index min) = Some (smsg min)). 
+        apply node_indexing_equiv. 
+      destruct H5.
+      SSCase "index min = 0".
+        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
+        inversion H6. symmetry in H8.
+        destruct istx. rewrite H8 in H7. inversion H7.
+      destruct H5.
+      SSCase "index min = 1".
+        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
+        inversion H6. symmetry in H8.
+        destruct istx. rewrite H8 in H7. inversion H7.
+      SSCase "index min = 2".
+        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
+          rewrite H2. simpl; auto.  
+        assert (n1 << min) as n1pre. constructor. constructor 2.
+          constructor. auto. omega.
+        apply prednost in n1pre.
+        assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
+          apply node_indexing_equiv.        
+        rewrite n1s in H7. rewrite H2 in H7. rewrite n1i in H7. 
+        simpl in H7. inversion H7. symmetry in H9.
+        apply node_smsg_msg_rx in H9. rewrite H9 in n1pre.
+        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
+        inversion H6. symmetry in H10.
+        apply node_smsg_msg_tx in H10. rewrite H10 in minst.
+        apply n1pre. constructor. exact minst.
+Qed.
 
-Theorem non_subterm_incl_penetrators : forall B k,
-(forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)) ->
-(forall p, In Node (Nodes B) p -> 
-              PenetratorNode p ->
-              ~ (#k) <st msg(p)).
-  Admitted. (* TODO - proof in progress *)
 
