@@ -16,7 +16,7 @@
    v.283 n.2, p.333-380, June 14, 2002.
    http://www.mitre.org/work/tech_papers/tech_papers_01/guttman_bundles/
  *)
-Require Import Logic List Arith Peano_dec Omega Ensembles.
+Require Import Logic List ListSet Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
 Require Import Relation_Operators.
 Require Import CoLoRRelDec CoLoRRelSub.
@@ -121,25 +121,9 @@ Hint Resolve eq_strand_dec.
 
 Definition StrandSet := Ensemble Strand.
 Definition KeySet := Ensemble Key.
+Definition TextSet := Ensemble Text.
 Definition MsgSet := Ensemble Msg.
 Definition SMsgSet := Ensemble SMsg.
-
-(* strand space *)
-Inductive StrandSpace : Type :=
-| strandspace : MsgSet -> StrandSet -> StrandSpace.
-(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
-           is a set E with a trace mapping tr : E -> list smsg" *)
-Hint Constructors StrandSpace.
-
-Definition SS_msgset (ss:StrandSpace) : MsgSet :=
-  match ss with
-    | strandspace m_set s_set => m_set
-  end.
-
-Definition SS_strandset (ss:StrandSpace) : StrandSet :=
-  match ss with
-    | strandspace m_set s_set => s_set
-  end.
 
 (* node in a strand space *)
 Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
@@ -311,15 +295,6 @@ Proof.
   destruct x0.
   rewrite e. simpl. reflexivity.
 Qed.
-(*
-Fixpoint get_nth_option_node 
-           (n orign:nat) (s origs:Strand) : option Node :=
-match s , n with
-| nil , _ => None
-| f :: rest, O => exist _ origs _ _
-| f :: rest, S n' => get_nth_option_node n' orign rest origs
-end.
-*)
 
 Lemma strand_node : forall (s: Strand) (i: nat),
 i < length s ->
@@ -331,6 +306,39 @@ Proof.
 Grab Existential Variables.
   simpl. exact len.
 Qed.
+
+Inductive Alignment : Type :=
+| Regular
+| Penetrator.
+
+Record Principal : Type := Principal_def
+{
+  Side : Alignment;
+  Actions : Strand;
+  PrivateKeys : set Key;
+  PrivateTexts : set Text
+}.
+
+Definition PenetratorBehavior := Principal -> Prop.
+
+(* strand space *)
+Record StrandSpace : Type := StrandSpace_def
+{
+  Protocol : set Principal;
+  Penetrators : Ensemble Principal;
+  PenetratorType : PenetratorBehavior;
+  Strands : StrandSet;
+  RegularAlignProp:
+    forall p, set_In p Protocol <-> (Side p) = Regular;
+  PenetratorAlignProp:
+    forall p, In Principal Penetrators p <-> (Side p) = Penetrator;
+  PenetratorBehaviorProp:
+    forall p, (Side p) = Penetrator <-> PenetratorType p;
+  StrandsProp:
+    forall s, In Strand Strands s -> exists p, (Actions p) = s
+}.
+(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
+           is a set E with a trace mapping tr : E -> list smsg" *)
 
 Inductive Comm : relation Node :=
 | comm :  forall n m t, ((smsg(n) = (+t) 
@@ -1025,66 +1033,54 @@ Variable Inv : relation Key.
 Variable Kp : Ensemble Key.
 (* Keys which are assumed to be initially known
    by the penetrator. *)
+(* TODO - add details that tie this to new SS def *)
 
 Variable UnkTp : Ensemble Text.
 (* Texts explicitly unknown to penetrators.
    (this should allow something like a secret nonce to
    not merely be "guessed" by a penetrator transmitting a
    msg)  *)
+(* TODO - add details that tie this to new SS def *)
 
-Variable Regular : Strand -> Prop.
-
-Inductive Penetrator : Strand -> Prop :=
-| P_M : forall s t, 
-          ~Regular s ->
+Inductive DolevYao : PenetratorBehavior :=
+| DY_M : forall p t, 
           ~ In Text UnkTp t ->
-          s = [(+(!t))] -> 
-          Penetrator s
-| P_F : forall s g, 
-          ~Regular s ->
-          s = [(-g)] -> 
-          Penetrator s
-| P_T : forall s g,
-          ~Regular s ->
-          s = [(-g), (+g), (+g)] ->
-          Penetrator s
-| P_C : forall s g h,
-          ~Regular s ->
-          s = [(-g), (-h), (+g*h)] ->
-          Penetrator s
-| P_S : forall s g h,
-          ~Regular s ->
-          s = [(-g*h), (+g), (+h)] ->
-          Penetrator s
-| P_K : forall s k,
-          ~Regular s ->
+          (Actions p) = [(+(!t))] -> 
+          DolevYao p
+| DY_F : forall p g, 
+          (Actions p) = [(-g)] -> 
+          DolevYao p
+| DY_T : forall p g,
+          (Actions p) = [(-g), (+g), (+g)] ->
+          DolevYao p
+| DY_C : forall p g h,
+          (Actions p) = [(-g), (-h), (+g*h)] ->
+          DolevYao p
+| DY_S : forall p g h,
+          (Actions p) = [(-g*h), (+g), (+h)] ->
+          DolevYao p
+| DY_K : forall p k,
           In Key Kp k ->
-          s = [(+ (#k))] ->
-          Penetrator s
-| P_E : forall s h k,
-          ~Regular s ->
-          s = [(- (#k)), (-h), (+ [h]^|k|)] ->
-          Penetrator s
-| P_D : forall s h k k',
-          ~Regular s ->
+          (Actions p) = [(+ (#k))] ->
+          DolevYao p
+| DY_E : forall p h k,
+          (Actions p) = [(- (#k)), (-h), (+ [h]^|k|)] ->
+          DolevYao p
+| DY_D : forall p h k k',
           Inv k' k ->
-          s = [(- (#k')), (- [h]^|k|), (+h)] ->
-          Penetrator s.
+          (Actions p) = [(- (#k')), (- [h]^|k|), (+h)] ->
+          DolevYao p.
 (* [REF 1] Definition 3.1
     The set of atomic actions/traces a penetrator
     may perform. *)
 
+(* TODO
 Definition PenetratorNode (n:Node) : Prop :=
 Penetrator (strand(n)).
 
 Definition RegularNode (n:Node) : Prop :=
 Regular (strand(n)).
-
-Axiom AlignmentAxiom : forall s, 
-{Regular s /\ ~ Penetrator s}+{~ Regular s /\ Penetrator s}.
-(* TODO - there's got to be a more elegant/natural way
-          of seperating out strand alignment. *)
-
+*)
 
 Lemma st_dec : forall a b,
 {a <st b} + {~ a <st b}.
@@ -1134,12 +1130,13 @@ Proof.
       contradiction.
 Qed.
 
-(* Proposition 3.3 
+(* TODO - rework w/ new SS def
+   Proposition 3.3 
    "Let C be a bundle, and let k be a Key s.t. ~ k in Kp,
    If k never originates on a regular node, then K is not
    a subterm of term(n) for any node n in C. In particular,
    for any penetrator node p in C, k is not a subterm
-   of the term of p." *)
+   of the term of p." 
 Theorem non_origin_imp_non_subterm : forall B k,
 ~ In Key Kp k ->
 (forall n, Origin (#k) n -> ~ RegularNode n) ->
@@ -1429,5 +1426,5 @@ Proof.
         apply node_smsg_msg_tx in H10. rewrite H10 in minst.
         apply n1pre. constructor. exact minst.
 Qed.
-
+*)
 
