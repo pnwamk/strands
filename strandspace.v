@@ -125,6 +125,57 @@ Definition TextSet := Ensemble Text.
 Definition MsgSet := Ensemble Msg.
 Definition SMsgSet := Ensemble SMsg.
 
+Inductive Alignment : Type :=
+| Regular
+| Penetrator.
+
+Record Principal : Type := Principal_def
+{
+  Side : Alignment;
+  Actions : Strand;
+  KnownKeys : set Key;
+  KnownTexts : set Text
+}.
+
+Definition PrincipalShape := Principal -> Prop.
+
+(* strand space *)
+Record StrandSpace : Type := StrandSpace_def
+{
+  (* Protocol and Regular principal facts *)
+  Protocol : PrincipalShape;
+  Regulars : Ensemble Principal;
+  RegularShapeProp:
+    forall r, In Principal Regulars r <-> Protocol r;
+  RegularAlignProp:
+    forall p, In Principal Regulars p <-> (Side p) = Regular;
+  (* Penetrator model and penetrator facts *)
+  Penetrators : Ensemble Principal;
+  PenetratorModel : PrincipalShape;
+  PenetratorShapeProp:
+    forall p, In Principal Penetrators p <-> PenetratorModel p;
+  PenetratorAlignProp:
+    forall p, In Principal Penetrators p <-> (Side p) = Penetrator;
+  (* Strands (msg detailss implicit in Msg type definition) *)
+  Strands : StrandSet;
+  StrandsProp:
+    forall s, In Strand Strands s 
+              <-> 
+              (exists p, (Actions p) = s 
+                         /\ (or (In Principal Regulars p)
+                                (In Principal Penetrators p)))
+}.
+(* [REF 1] 
+           Page 4 "One may think of a strand space as containing all the 
+                   legitimate executions of the protocol expected within 
+                   its useful lifetime, together with all the actions that
+                   a penetrator might apply to messages contained in those
+                   executions."
+
+           Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
+           is a set E with a trace mapping tr : E -> list smsg" *)
+
+
 (* node in a strand space *)
 Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
 (* [REF 1] Definition 2.3.1 pg 6
@@ -306,66 +357,6 @@ Proof.
 Grab Existential Variables.
   simpl. exact len.
 Qed.
-
-Inductive Alignment : Type :=
-| Regular
-| Penetrator.
-
-Record Principal : Type := Principal_def
-{
-  Side : Alignment;
-  Actions : Strand;
-  SecretKeys : set Key;
-  SecretTexts : set Text
-}.
-
-Definition PrincipalShape := Principal -> Prop.
-
-(* strand space *)
-Record StrandSpace : Type := StrandSpace_def
-{
-  (* Protocol and Regular principal facts *)
-  Protocol : PrincipalShape;
-  Regulars : Ensemble Principal;
-  RegularShapeProp:
-    forall r, In Principal Regulars r <-> Protocol r;
-  RegularAlignProp:
-    forall p, In Principal Regulars p <-> (Side p) = Regular;
-  (* Penetrator model and penetrator facts *)
-  Penetrators : Ensemble Principal;
-  PenetratorModel : PrincipalShape;
-  PenetratorShapeProp:
-    forall p, In Principal Penetrators p <-> PenetratorModel p;
-  PenetratorAlignProp:
-    forall p, In Principal Penetrators p <-> (Side p) = Penetrator;
-  (* Strands (msg detailss implicit in Msg type definition) *)
-  Strands : StrandSet;
-  StrandsProp:
-    forall s, In Strand Strands s 
-              <-> 
-              (exists p, (Actions p) = s 
-                         /\ (or (In Principal Regulars p)
-                                (In Principal Penetrators p)));
-  (* Allows for a secret key which no one but a 
-     unique owner initially knows in the entire strand space. *)
-  KeySecretProp:
-    forall p q k, set_In k (SecretKeys p) 
-                  /\ set_In k (SecretKeys q) -> p = q;
-  (* Allows for a secret text (e.g. a nonce) which no one but a unique 
-     owner initially knows in the entire strand space. *)
-  TextSecretProp:
-    forall p q t, set_In t (SecretTexts p) 
-                  /\ set_In t (SecretTexts q) -> p = q
-}.
-(* [REF 1] 
-           Page 4 "One may think of a strand space as containing all the 
-                   legitimate executions of the protocol expected within 
-                   its useful lifetime, together with all the actions that
-                   a penetrator might apply to messages contained in those
-                   executions."
-
-           Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
-           is a set E with a trace mapping tr : E -> list smsg" *)
 
 Inductive Comm : relation Node :=
 | comm :  forall n m t, ((smsg(n) = (+t) 
@@ -1057,19 +1048,13 @@ Proof.
   exact H1.
 Qed.
 
-Definition NonSecretText (k:Text) := 
-  forall p : Principal, ~ set_In k (SecretTexts p).
-
-Definition NonSecretKey (k:Key) := 
-  forall p : Principal, ~ set_In k (SecretKeys p).
-
 Variable Inv : relation Key.
 (* Used to indicate two keys are cryptographic
    inverses of eachother. *)
 
 Inductive DolevYao : PrincipalShape :=
 | DY_M : forall p t, 
-           NonSecretText t ->
+           set_In t (KnownTexts p) ->
            (Actions p) = [(+(!t))] -> 
            DolevYao p
 | DY_F : forall p g, 
@@ -1085,7 +1070,7 @@ Inductive DolevYao : PrincipalShape :=
            (Actions p) = [(-g*h), (+g), (+h)] ->
            DolevYao p
 | DY_K : forall p k,
-           NonSecretKey k ->
+           set_In k (KnownKeys p) ->
            (Actions p) = [(+ (#k))] ->
            DolevYao p
 | DY_E : forall p h k,
@@ -1155,15 +1140,15 @@ Proof.
       contradiction.
 Qed.
 
-(* TODO - rework w/ new SS def
-   Proposition 3.3 
+
+(* Proposition 3.3 
    "Let C be a bundle, and let k be a Key s.t. ~ k in Kp,
    If k never originates on a regular node, then K is not
    a subterm of term(n) for any node n in C. In particular,
    for any penetrator node p in C, k is not a subterm
    of the term of p." 
 Theorem non_origin_imp_non_subterm : forall B k,
-~ In Key Kp k ->
+(forall p, (Side p) = Penetrator -> ~ set_In (KnownKeys p)) ->
 (forall n, Origin (#k) n -> ~ RegularNode n) ->
 (forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)).
 Proof.
@@ -1451,5 +1436,5 @@ Proof.
         apply node_smsg_msg_tx in H10. rewrite H10 in minst.
         apply n1pre. constructor. exact minst.
 Qed.
-*)
 
+*)
