@@ -315,29 +315,56 @@ Record Principal : Type := Principal_def
 {
   Side : Alignment;
   Actions : Strand;
-  PrivateKeys : set Key;
-  PrivateTexts : set Text
+  SecretKeys : set Key;
+  SecretTexts : set Text
 }.
 
-Definition PenetratorBehavior := Principal -> Prop.
+Definition PrincipalShape := Principal -> Prop.
 
 (* strand space *)
 Record StrandSpace : Type := StrandSpace_def
 {
-  Protocol : set Principal;
-  Penetrators : Ensemble Principal;
-  PenetratorType : PenetratorBehavior;
-  Strands : StrandSet;
+  (* Protocol and Regular principal facts *)
+  Protocol : PrincipalShape;
+  Regulars : Ensemble Principal;
+  RegularShapeProp:
+    forall r, In Principal Regulars r <-> Protocol r;
   RegularAlignProp:
-    forall p, set_In p Protocol <-> (Side p) = Regular;
+    forall p, In Principal Regulars p <-> (Side p) = Regular;
+  (* Penetrator model and penetrator facts *)
+  Penetrators : Ensemble Principal;
+  PenetratorModel : PrincipalShape;
+  PenetratorShapeProp:
+    forall p, In Principal Penetrators p <-> PenetratorModel p;
   PenetratorAlignProp:
     forall p, In Principal Penetrators p <-> (Side p) = Penetrator;
-  PenetratorBehaviorProp:
-    forall p, (Side p) = Penetrator <-> PenetratorType p;
+  (* Strands (msg detailss implicit in Msg type definition) *)
+  Strands : StrandSet;
   StrandsProp:
-    forall s, In Strand Strands s -> exists p, (Actions p) = s
+    forall s, In Strand Strands s 
+              <-> 
+              (exists p, (Actions p) = s 
+                         /\ (or (In Principal Regulars p)
+                                (In Principal Penetrators p)));
+  (* Allows for a secret key which no one but a 
+     unique owner initially knows in the entire strand space. *)
+  KeySecretProp:
+    forall p q k, set_In k (SecretKeys p) 
+                  /\ set_In k (SecretKeys q) -> p = q;
+  (* Allows for a secret text (e.g. a nonce) which no one but a unique 
+     owner initially knows in the entire strand space. *)
+  TextSecretProp:
+    forall p q t, set_In t (SecretTexts p) 
+                  /\ set_In t (SecretTexts q) -> p = q
 }.
-(* [REF 1] Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
+(* [REF 1] 
+           Page 4 "One may think of a strand space as containing all the 
+                   legitimate executions of the protocol expected within 
+                   its useful lifetime, together with all the actions that
+                   a penetrator might apply to messages contained in those
+                   executions."
+
+           Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
            is a set E with a trace mapping tr : E -> list smsg" *)
 
 Inductive Comm : relation Node :=
@@ -644,8 +671,12 @@ Hint Constructors InPair.
 
 Record Bundle : Type := Bundle_def
 {
+  Space : StrandSpace;
   Nodes : NodeSet;
   Edges : EdgeSet;
+  (* A bundle is a portion of a strand space *)
+  SSsubset :
+    forall n:Node, In Node Nodes n -> In Strand (Strands Space) (strand n);
   FiniteNodes: FiniteSet Nodes;
   FiniteEdges: FiniteSet Edges;
   ValidEdges:
@@ -675,10 +706,10 @@ n =-> m ->
 (In Node (Nodes B) n <-> In Node (Nodes B) m).
 Proof.
   intros B n m ssedge. split; intros Hin.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   apply valE in ssedge. apply valE. constructor 2.
   exists n. exact ssedge.
-  destruct B as [N E finN finE valE uniqtx acyc].
+  destruct B as [SS N E SSsub finN finE valE uniqtx acyc].
   apply valE in ssedge. apply valE. constructor 1.
   exists m. exact ssedge.
 Qed.
@@ -711,7 +742,7 @@ exists s, is_restricted SSEdge s /\
 forall x, ListSet.set_In x s <-> In Node (Nodes B) x.
 Proof.
   intros B.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   destruct valE as [EimpInN EimpSSEdge].
   destruct (ensemble_imp_set Node eq_node_dec N finN) 
     as [s [inAll [nodup [n [slen scard]]]]].
@@ -790,7 +821,7 @@ Proof.
     eapply rt_trans. exact xy. exact yz.
   Case "AntiSymmetry".
     intros x y xy yz.
-    destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+    destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
     destruct (eq_node_dec x y) as [xyeq | xyneq].
     SCase "x = y". exact xyeq.
     SCase "x <> y". 
@@ -803,7 +834,7 @@ Lemma sspath_strict_order : forall (B: Bundle),
 StrictOrder Node SSPath.
 Proof.
   intros B.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   split.
   Case "Irreflexivity".
     intros x. apply acyc.
@@ -824,7 +855,7 @@ exists min, set_minimal N' min.
 Proof.
   intros B N' incl nempty.
   remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   assert (Finite Node N') as finN'. eapply Finite_downward_closed.
     exact finN. exact incl.
   destruct (finite_cardinal Node N' finN') as [n card].
@@ -857,7 +888,7 @@ is_tx n.
 Proof.
   intros B N' sub incl n setmin.
   remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   assert ((Nodes B) = N) as NB. subst B. simpl. reflexivity.
   remember (smsg n) as nsmsg. symmetry in Heqnsmsg.
   destruct nsmsg.
@@ -933,7 +964,7 @@ Origin t n.
 Proof.
   intros B N' n t N'def nmin.
   remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
   assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
   assert (In Node N' n) as nIn. destruct nmin; auto.
   assert (t <st (msg n)) as tsubn.
@@ -1026,50 +1057,44 @@ Proof.
   exact H1.
 Qed.
 
+Definition NonSecretText (k:Text) := 
+  forall p : Principal, ~ set_In k (SecretTexts p).
+
+Definition NonSecretKey (k:Key) := 
+  forall p : Principal, ~ set_In k (SecretKeys p).
+
 Variable Inv : relation Key.
 (* Used to indicate two keys are cryptographic
    inverses of eachother. *)
 
-Variable Kp : Ensemble Key.
-(* Keys which are assumed to be initially known
-   by the penetrator. *)
-(* TODO - add details that tie this to new SS def *)
-
-Variable UnkTp : Ensemble Text.
-(* Texts explicitly unknown to penetrators.
-   (this should allow something like a secret nonce to
-   not merely be "guessed" by a penetrator transmitting a
-   msg)  *)
-(* TODO - add details that tie this to new SS def *)
-
-Inductive DolevYao : PenetratorBehavior :=
+Inductive DolevYao : PrincipalShape :=
 | DY_M : forall p t, 
-          ~ In Text UnkTp t ->
-          (Actions p) = [(+(!t))] -> 
-          DolevYao p
+           NonSecretText t ->
+           (Actions p) = [(+(!t))] -> 
+           DolevYao p
 | DY_F : forall p g, 
-          (Actions p) = [(-g)] -> 
-          DolevYao p
+           (Actions p) = [(-g)] -> 
+           DolevYao p
 | DY_T : forall p g,
-          (Actions p) = [(-g), (+g), (+g)] ->
-          DolevYao p
+           (Actions p) = [(-g), (+g), (+g)] ->
+           DolevYao p
 | DY_C : forall p g h,
-          (Actions p) = [(-g), (-h), (+g*h)] ->
-          DolevYao p
+           (Actions p) = [(-g), (-h), (+g*h)] ->
+           DolevYao p
 | DY_S : forall p g h,
-          (Actions p) = [(-g*h), (+g), (+h)] ->
-          DolevYao p
+           (Actions p) = [(-g*h), (+g), (+h)] ->
+           DolevYao p
 | DY_K : forall p k,
-          In Key Kp k ->
-          (Actions p) = [(+ (#k))] ->
-          DolevYao p
+           NonSecretKey k ->
+           (Actions p) = [(+ (#k))] ->
+           DolevYao p
 | DY_E : forall p h k,
-          (Actions p) = [(- (#k)), (-h), (+ [h]^|k|)] ->
-          DolevYao p
+           (Actions p) = [(- (#k)), (-h), (+ [h]^|k|)] ->
+           DolevYao p
 | DY_D : forall p h k k',
-          Inv k' k ->
-          (Actions p) = [(- (#k')), (- [h]^|k|), (+h)] ->
-          DolevYao p.
+           Inv k' k ->
+           (Actions p) = [(- (#k')), (- [h]^|k|), (+h)] ->
+           DolevYao p.
 (* [REF 1] Definition 3.1
     The set of atomic actions/traces a penetrator
     may perform. *)
