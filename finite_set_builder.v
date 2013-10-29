@@ -3,6 +3,8 @@ Require Import Ensembles Finite_sets Finite_sets_facts.
 Require Import List ListSet.
 Require Import util set_rep_equiv.
 
+Open Scope list_scope.
+
 Section set_builder.
 
 Variable X : Type.

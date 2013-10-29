@@ -23,9 +23,8 @@ Require Import CoLoRRelDec CoLoRRelSub.
 Require Import strictorder set_rep_equiv util.
 Require Import finite_set_builder.
 
+Module SS.
 
-Definition FiniteSet {X:Type} (E:Ensemble X) : Prop :=
-Finite X E.
 
 (* atomic messages *)
 Variable Text : Set.
@@ -34,18 +33,12 @@ Hint Resolve eq_text_dec.
 
 (* representing kryptographic key *)
 Variable Key : Set.
-(* TODO - injective, unary operation (inv : key -> key)
-          Or in Coq would this make more sense
-          instead as  key -> key -> Prop?
-          The text notes the ability to handle
-          both symmetric and asymmetric keys... *)
 Variable eq_key_dec : forall (x y:Key), {x = y} + {x <> y}.
 Hint Resolve eq_key_dec.
 
-(* TODO? For the analysis of the NSL protocol, they 
-   include an extension of term/message definitions
-   that includes names and public keys which are
-   associated with a specific name.*)
+Variable Inv : relation Key.
+(* Used to indicate two keys are cryptographic
+   inverses of eachother. *)
 
 (* message or text, comprising the set of terms "A" *)
 Inductive Msg : Type :=
@@ -58,12 +51,12 @@ Inductive Msg : Type :=
 (* [REF 2] pg 4 paragraph 3 (details of encryption and subterms) *)
 Hint Constructors Msg.
 
+Notation "(! x )" := (msg_text x) : ss_scope. 
+Notation "(# k )" := (msg_key k) : ss_scope.
+Notation "x * y" := (msg_join x y) (at level 40, left associativity) : ss_scope.
+Notation "{ m }^[ k ] " := (msg_encr k m) (at level 0, m at level 99, k at level 99) : ss_scope.
 
-Notation "(! x )" := (msg_text x). 
-Notation "(# k )" := (msg_key k).
-Notation "x * y" := (msg_join x y) (at level 40, left associativity). 
-Notation "[ m ]^| k | " := (msg_encr k m).
-
+Open Scope ss_scope.
 
 Definition eq_msg_dec : forall x y : Msg,  
   {x = y} + {x <> y}.
@@ -81,11 +74,11 @@ Inductive Subterm : Msg -> Msg -> Prop :=
 | st_join_r : forall st l r, 
                Subterm st r -> Subterm st (l*r)
 | st_encr : forall st t k, 
-               Subterm st t -> Subterm st ([t]^|k|).
+               Subterm st t -> Subterm st ({t}^[k]).
 (* [REF 1] Section 2.1 pg 6 and Definition 2.11 *)
 Hint Constructors Subterm.
 
-Notation "a <st b" := (Subterm a b) (at level 30).
+Notation "a <st b" := (Subterm a b) (at level 30) : ss_scope.
 
 (* signed message, + (tx) or - (rx) *)
 Inductive SMsg : Type := 
@@ -96,8 +89,8 @@ Inductive SMsg : Type :=
    and the second a signed message. *)
 Hint Constructors SMsg.
 
-Notation "(+ x )" := (msg_tx x).
-Notation "(- x )" := (msg_rx x).
+Notation "(+ x )" := (msg_tx x) : ss_scope.
+Notation "(- x )" := (msg_rx x) : ss_scope.
 
 Definition eq_smsg_dec : forall x y : SMsg,  
   {x = y} + {x <> y}.
@@ -118,63 +111,6 @@ Proof.
  intros. decide equality.
 Qed.
 Hint Resolve eq_strand_dec.
-
-Definition StrandSet := Ensemble Strand.
-Definition KeySet := Ensemble Key.
-Definition TextSet := Ensemble Text.
-Definition MsgSet := Ensemble Msg.
-Definition SMsgSet := Ensemble SMsg.
-
-Inductive Alignment : Type :=
-| Regular
-| Penetrator.
-
-Record Principal : Type := Principal_def
-{
-  Side : Alignment;
-  Actions : Strand;
-  KnownKeys : set Key;
-  KnownTexts : set Text
-}.
-
-Definition PrincipalShape := Principal -> Prop.
-
-(* strand space *)
-Record StrandSpace : Type := StrandSpace_def
-{
-  (* Protocol and Regular principal facts *)
-  Protocol : PrincipalShape;
-  Regulars : Ensemble Principal;
-  RegularShapeProp:
-    forall r, In Principal Regulars r <-> Protocol r;
-  RegularAlignProp:
-    forall p, In Principal Regulars p <-> (Side p) = Regular;
-  (* Penetrator model and penetrator facts *)
-  Penetrators : Ensemble Principal;
-  PenetratorModel : PrincipalShape;
-  PenetratorShapeProp:
-    forall p, In Principal Penetrators p <-> PenetratorModel p;
-  PenetratorAlignProp:
-    forall p, In Principal Penetrators p <-> (Side p) = Penetrator;
-  (* Strands (msg detailss implicit in Msg type definition) *)
-  Strands : StrandSet;
-  StrandsProp:
-    forall s, In Strand Strands s 
-              <-> 
-              (exists p, (Actions p) = s 
-                         /\ (or (In Principal Regulars p)
-                                (In Principal Penetrators p)))
-}.
-(* [REF 1] 
-           Page 4 "One may think of a strand space as containing all the 
-                   legitimate executions of the protocol expected within 
-                   its useful lifetime, together with all the actions that
-                   a penetrator might apply to messages contained in those
-                   executions."
-
-           Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
-           is a set E with a trace mapping tr : E -> list smsg" *)
-
 
 (* node in a strand space *)
 Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
@@ -373,7 +309,7 @@ Hint Constructors Comm.
   may send or receive a message but not both at the 
   same time". *)
 
-Notation "a --> b" := (Comm a b) (at level 0, right associativity). 
+Notation "a --> b" := (Comm a b) (at level 0, right associativity)  : ss_scope.
 
 Lemma comm_dec : forall x y,
 {x --> y} + {~ x --> y}.
@@ -449,7 +385,7 @@ Inductive Successor : relation Node :=
    "When n1= <s,i> and n2=<s,i+1> are members of N (set of node), there is
     an edge n1 => n2." *)
 
-Notation "a ==> b" := (Successor a b)  (at level 0, right associativity). 
+Notation "a ==> b" := (Successor a b)  (at level 0, right associativity) : ss_scope. 
 
 Lemma succ_dec : forall x y,
 {x ==> y} + {~ x ==> y}.
@@ -494,7 +430,7 @@ clos_trans Successor.
     the same strand." *)
 Hint Constructors clos_trans.
 
-Notation "a ==>+ b" := (StrandPath a b)  (at level 0, right associativity). 
+Notation "a ==>+ b" := (StrandPath a b)  (at level 0, right associativity) : ss_scope.
 
 Lemma spath_imp_eq_strand : forall x y,
 x ==>+ y -> strand(x) = strand(y).
@@ -541,7 +477,7 @@ Definition SSEdge : relation Node :=
 union Comm Successor.
 Hint Constructors or.
 
-Notation "a =-> b" := (SSEdge a b) (at level 30, right associativity). 
+Notation "a =-> b" := (SSEdge a b) (at level 30, right associativity) : ss_scope.
 
 Lemma ssedge_dec : forall x y,
 {x =-> y} + {~x =-> y}.
@@ -596,7 +532,7 @@ Hint Resolve ssedge_antisymmetry.
 Definition SSPath : relation Node := 
 clos_trans SSEdge.
 
-Notation "a << b" := (SSPath a b) (at level 0, right associativity). 
+Notation "a << b" := (SSPath a b) (at level 0, right associativity) : ss_scope.
 
 Theorem spath_imp_sspath : forall i j,
 i ==>+ j -> i << j.
@@ -621,7 +557,7 @@ Definition SSPathEq : relation Node :=
 clos_refl_trans SSEdge.
 Hint Constructors clos_refl_trans.
 
-Notation "a <<* b" := (SSPathEq a b) (at level 0, right associativity). 
+Notation "a <<* b" := (SSPathEq a b) (at level 0, right associativity) : ss_scope.
 
 Theorem sspatheq_opts: forall n m,
 n <<* m -> n << m \/ n = m.
@@ -662,14 +598,11 @@ Hint Constructors InPair.
 
 Record Bundle : Type := Bundle_def
 {
-  Space : StrandSpace;
   Nodes : NodeSet;
   Edges : EdgeSet;
   (* A bundle is a portion of a strand space *)
-  SSsubset :
-    forall n:Node, In Node Nodes n -> In Strand (Strands Space) (strand n);
-  FiniteNodes: FiniteSet Nodes;
-  FiniteEdges: FiniteSet Edges;
+  FiniteNodes: Finite Node Nodes;
+  FiniteEdges: Finite Edge Edges;
   ValidEdges:
     (* N is the set of nodes incident with any edge in E *)
     (and (forall x, InPair Edges x -> In Node Nodes x)
@@ -697,10 +630,10 @@ n =-> m ->
 (In Node (Nodes B) n <-> In Node (Nodes B) m).
 Proof.
   intros B n m ssedge. split; intros Hin.
-  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
   apply valE in ssedge. apply valE. constructor 2.
   exists n. exact ssedge.
-  destruct B as [SS N E SSsub finN finE valE uniqtx acyc].
+  destruct B as [N E finN finE valE uniqtx acyc].
   apply valE in ssedge. apply valE. constructor 1.
   exists m. exact ssedge.
 Qed.
@@ -733,7 +666,7 @@ exists s, is_restricted SSEdge s /\
 forall x, ListSet.set_In x s <-> In Node (Nodes B) x.
 Proof.
   intros B.
-  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
   destruct valE as [EimpInN EimpSSEdge].
   destruct (ensemble_imp_set Node eq_node_dec N finN) 
     as [s [inAll [nodup [n [slen scard]]]]].
@@ -812,7 +745,7 @@ Proof.
     eapply rt_trans. exact xy. exact yz.
   Case "AntiSymmetry".
     intros x y xy yz.
-    destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+    destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
     destruct (eq_node_dec x y) as [xyeq | xyneq].
     SCase "x = y". exact xyeq.
     SCase "x <> y". 
@@ -825,7 +758,7 @@ Lemma sspath_strict_order : forall (B: Bundle),
 StrictOrder Node SSPath.
 Proof.
   intros B.
-  destruct B as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
   split.
   Case "Irreflexivity".
     intros x. apply acyc.
@@ -846,7 +779,7 @@ exists min, set_minimal N' min.
 Proof.
   intros B N' incl nempty.
   remember B as bundle.
-  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
   assert (Finite Node N') as finN'. eapply Finite_downward_closed.
     exact finN. exact incl.
   destruct (finite_cardinal Node N' finN') as [n card].
@@ -879,7 +812,7 @@ is_tx n.
 Proof.
   intros B N' sub incl n setmin.
   remember B as bundle.
-  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
   assert ((Nodes B) = N) as NB. subst B. simpl. reflexivity.
   remember (smsg n) as nsmsg. symmetry in Heqnsmsg.
   destruct nsmsg.
@@ -955,7 +888,7 @@ Origin t n.
 Proof.
   intros B N' n t N'def nmin.
   remember B as bundle.
-  destruct bundle as [SS N E SSsub finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
   assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
   assert (In Node N' n) as nIn. destruct nmin; auto.
   assert (t <st (msg n)) as tsubn.
@@ -994,7 +927,7 @@ Qed.
 
 (* Axiom 1 -- provable in this context *)
 Theorem free_encryption : forall m1 m2 k1 k2,
-[m1]^|k1| = [m2]^|k2| -> m1 = m2 /\ k1 = k2.
+{m1}^[k1] = {m2}^[k2] -> m1 = m2 /\ k1 = k2.
 Proof.
   intros m m' k k' encreq.
   inversion encreq. split; auto. 
@@ -1011,11 +944,11 @@ Qed.
 (* Axiom 2 -- provable in this context *)
 Theorem free_term_algebra : forall m m' n n' k k' t,
 (m * n = m' * n' -> m = m' /\ n = n')
-/\ m * n <> [m']^|k|
+/\ m * n <> {m'}^[k]
 /\ (#k) <> m * n
 /\ (!t) <> m * n
-/\ (#k) <> [m]^|k'|
-/\ (!t) <> [m]^|k|.
+/\ (#k) <> {m}^[k']
+/\ (!t) <> {m}^[k].
 Proof.
   intros m m' n n' k k' t;
   split. intros eq. inversion eq; auto. 
@@ -1039,58 +972,14 @@ end.
 (* Proposition 2.12 *)
 Lemma encr_subterm_imp : forall k k' h h',
 k <> k' ->
-[h']^|k'| <st [h]^|k| ->
-[h']^|k'| <st h.
+{h'}^[k'] <st {h}^[k] ->
+{h'}^[k'] <st h.
 Proof.
   intros k k' h h' kneq st.
   inversion st; subst.
   assert False. apply kneq. reflexivity. contradiction.
   exact H1.
 Qed.
-
-Variable Inv : relation Key.
-(* Used to indicate two keys are cryptographic
-   inverses of eachother. *)
-
-Inductive DolevYao : PrincipalShape :=
-| DY_M : forall p t, 
-           set_In t (KnownTexts p) ->
-           (Actions p) = [(+(!t))] -> 
-           DolevYao p
-| DY_F : forall p g, 
-           (Actions p) = [(-g)] -> 
-           DolevYao p
-| DY_T : forall p g,
-           (Actions p) = [(-g), (+g), (+g)] ->
-           DolevYao p
-| DY_C : forall p g h,
-           (Actions p) = [(-g), (-h), (+g*h)] ->
-           DolevYao p
-| DY_S : forall p g h,
-           (Actions p) = [(-g*h), (+g), (+h)] ->
-           DolevYao p
-| DY_K : forall p k,
-           set_In k (KnownKeys p) ->
-           (Actions p) = [(+ (#k))] ->
-           DolevYao p
-| DY_E : forall p h k,
-           (Actions p) = [(- (#k)), (-h), (+ [h]^|k|)] ->
-           DolevYao p
-| DY_D : forall p h k k',
-           Inv k' k ->
-           (Actions p) = [(- (#k')), (- [h]^|k|), (+h)] ->
-           DolevYao p.
-(* [REF 1] Definition 3.1
-    The set of atomic actions/traces a penetrator
-    may perform. *)
-
-(* TODO
-Definition PenetratorNode (n:Node) : Prop :=
-Penetrator (strand(n)).
-
-Definition RegularNode (n:Node) : Prop :=
-Regular (strand(n)).
-*)
 
 Lemma st_dec : forall a b,
 {a <st b} + {~ a <st b}.
@@ -1133,308 +1022,80 @@ Proof.
   Case "b = encr".
     destruct IHb.
       left. apply st_encr. exact s.
-      destruct (eq_msg_dec a ([b]^|k|)). subst.
+      destruct (eq_msg_dec a ({b}^[k])). subst.
       left. constructor.
       right. intros contra. inversion contra. subst.
       apply n0. reflexivity.
       contradiction.
 Qed.
 
+(* Meta Strand Space properties/objects *)
+(* [REF 1] 
+           Page 4 "One may think of a strand space as containing all the 
+                   legitimate executions of the protocol expected within 
+                   its useful lifetime, together with all the actions that
+                   a penetrator might apply to messages contained in those
+                   executions."
 
-(* Proposition 3.3 
-   "Let C be a bundle, and let k be a Key s.t. ~ k in Kp,
-   If k never originates on a regular node, then K is not
-   a subterm of term(n) for any node n in C. In particular,
-   for any penetrator node p in C, k is not a subterm
-   of the term of p." 
-Theorem non_origin_imp_non_subterm : forall B k,
-(forall p, (Side p) = Penetrator -> ~ set_In (KnownKeys p)) ->
-(forall n, Origin (#k) n -> ~ RegularNode n) ->
-(forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)).
+           Definition 2.2 pg 6 "A strand space over A (set of possible msgs) 
+           is a set E with a trace mapping tr : E -> list smsg" *)
+
+Variable Protocol : set Strand.
+Definition RegularStrand (s:Strand) := set_In s Protocol.
+Definition RegularNode (n:Node) := RegularStrand (strand n).
+Definition PenetratorStrand (s:Strand) := ~RegularStrand s.
+Definition PenetratorNode (n:Node) := ~RegularNode n.
+Variable PenetratorModel : Strand -> Prop.
+ Hypothesis penetrator_behavior : 
+   forall s, PenetratorStrand s -> PenetratorModel s.
+
+Theorem align_dec : forall s,
+RegularStrand s \/ PenetratorStrand s.
 Proof.
-  intros B k notInKp noOrigin n nInN st.
-  remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
-  assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
-  clear Heqbundle.
-  assert (forall x : Node, {(#k) <st msg x} + {~ (#k) <st msg x})
-         as Pdec.
-    intros x. apply st_dec.    
-  destruct (ex_filter_ensemble 
-              Node 
-              eq_node_dec 
-              (fun n => (#k) <st (msg n)) 
-              Pdec
-              N 
-              finN) 
-    as [N' [inclN' N'memP]].
-  assert (FiniteSet N') as finN'. eapply Finite_downward_closed.
-    exact finN. exact inclN'.
-  destruct finN' as [| N' fin x].
-  Case "Empty_set".
-    assert (In Node (Empty_set Node) n) as  contra.
-      apply N'memP. split. exact nInN. exact st.
-    inversion contra.
-  Case "non-empty".
-    assert (exists min, set_minimal (Add Node N' x) min) as exmin.
-      eapply (bundle_subset_minimal B). rewrite <- NB. exact inclN'.
-      intros contra. apply Add_not_Empty in contra. contradiction.
-    destruct exmin as [min minP].
-    assert (Origin (#k) min) as minorg.
-      eapply (min_origin B (Add Node N' x)). split.
-      intros [mIn mst].
-      apply N'memP. split. rewrite NB. exact mIn. exact mst.
-      intros mIn. split.
-      apply inclN' in mIn. rewrite <- NB. exact mIn.
-      apply N'memP in mIn. destruct mIn; auto. exact minP.
-    destruct (AlignmentAxiom (strand min)) as [[reg notpen] | [notreg pen]].
-    eapply noOrigin. exact minorg. exact reg.
-    destruct minorg as [istx [minst prednost]].
-    inversion pen.
-    SCase "M".
-      assert (length (strand min) = 1). rewrite H2. auto.
-      assert ((index min) = 0). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-      apply node_indexing_equiv. 
-      rewrite H2 in H6. rewrite H5 in H6. simpl in H6.
-      inversion H6. 
-      assert (msg min = (!t)) as minmsg.
-      apply node_smsg_msg_tx; auto. rewrite minmsg in minst. 
-      inversion minst.
-    SCase "F".
-      assert (length (strand min) = 1). rewrite H1. auto.
-      assert ((index min) = 0). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-      apply node_indexing_equiv. 
-      rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-      inversion H5. destruct istx. rewrite <- H7 in H6.
-      inversion H6.
-    SCase "T".
-      assert (length (strand min) = 3). rewrite H1. auto.
-      assert ((index min) = 0 
-              \/ (index min) = 1 
-              \/ (index min) = 2). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-      apply node_indexing_equiv. 
-      destruct H4.
-      SSCase "index min = 0".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      destruct H4.
-      SSCase "index min = 1".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. 
-        assert (msg min = g) as minmsg.
-        apply node_smsg_msg_tx; auto. rewrite minmsg in minst.
-        destruct (strand_node (strand min) 0) as [y [ys yi]].
-          rewrite H1. simpl; auto. 
-        assert (y << min) as ypremin. constructor.
-          constructor 2. constructor. rewrite ys. reflexivity.
-          omega.
-        apply prednost in ypremin.
-        assert (nth_error (strand min) (index y) = Some (smsg y)).
-          rewrite <- ys.
-        apply node_indexing_equiv. rewrite H1 in H6. rewrite yi in H6.
-        simpl in H6. inversion H6. symmetry in H9. 
-        eapply node_smsg_msg_rx in H9. rewrite H9 in ypremin.
-        contradiction.
-      SSCase "index min = 2".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. 
-        assert (msg min = g) as minmsg.
-        apply node_smsg_msg_tx; auto. rewrite minmsg in minst.
-        destruct (strand_node (strand min) 1) as [y [ys yi]].
-          rewrite H1. simpl; auto. 
-        assert (y << min) as ypremin. constructor.
-          constructor 2. constructor. rewrite ys. reflexivity.
-          omega.
-        apply prednost in ypremin.
-        assert (nth_error (strand min) (index y) = Some (smsg y)).
-          rewrite <- ys.
-        apply node_indexing_equiv. rewrite H1 in H6. rewrite yi in H6.
-        simpl in H6. inversion H6. symmetry in H9. 
-        eapply node_smsg_msg_tx in H9. rewrite H9 in ypremin.
-        contradiction.      
-    SCase "C".
-      assert (length (strand min) = 3). rewrite H1. auto.
-      assert ((index min) = 0 
-              \/ (index min) = 1 
-              \/ (index min) = 2). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-      apply node_indexing_equiv. 
-      destruct H4.
-      SSCase "index min = 0".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      destruct H4.
-      SSCase "index min = 1".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      SSCase "index min = 2".
-        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
-          rewrite H1. simpl; auto. 
-        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
-          rewrite H1. simpl; auto. 
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. symmetry in H7. apply node_smsg_msg_tx in H7.
-        rewrite H7 in minst.
-        inversion minst. 
-        SSSCase "#k <st g".
-          assert (n0 << min) as n0pred. econstructor 2. constructor. 
-            constructor 2. constructor. rewrite n0s. symmetry in n1s. 
-            exact n1s. omega. constructor. constructor 2. constructor. 
-            exact n1s. omega.
-          apply prednost in n0pred. 
-          assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
-            apply node_indexing_equiv.
-          rewrite n0i in H11. rewrite n0s in H11. rewrite H1 in H11.
-          simpl in H11. inversion H11. symmetry in H13.
-          apply node_smsg_msg_rx in H13. rewrite H13 in n0pred.
-          contradiction.
-        SSSCase "#k <st h".
-          assert (n1 << min) as n1pred. econstructor. constructor 2. 
-            constructor. auto. omega.
-          apply prednost in n1pred.
-          assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
-            apply node_indexing_equiv.
-          rewrite n1s in H11. rewrite n1i in H11. rewrite H1 in H11.
-          simpl in H11. inversion H11. symmetry in H13.
-          apply node_smsg_msg_rx in H13.
-          rewrite H13 in n1pred. contradiction.
-    SCase "S".
-      assert (length (strand min) = 3). rewrite H1. auto.
-      assert ((index min) = 0 
-              \/ (index min) = 1 
-              \/ (index min) = 2). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-      apply node_indexing_equiv. 
-      destruct H4.
-      SSCase "index min = 0".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      destruct H4.
-      SSCase "index min = 1".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
-          rewrite H1. simpl; auto. 
-        assert (n0 << min) as n0pred. econstructor. constructor 2. 
-          constructor. auto. omega.
-        apply prednost in n0pred.
-        assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
-          apply node_indexing_equiv.
-        rewrite n0s in H6. rewrite n0i in H6. rewrite H1 in H6.
-        simpl in H6. inversion H6. symmetry in H8.
-        apply node_smsg_msg_rx in H8. rewrite H8 in n0pred.
-        assert (nth_error (strand min) (index min) = Some (smsg min)). 
-          apply node_indexing_equiv.
-         rewrite H1 in H7. rewrite H4 in H7. simpl in H7.
-         inversion H7. symmetry in H10. apply node_smsg_msg_tx in H10.
-         rewrite H10 in minst.
-         apply n0pred. constructor. exact minst.
-      SSCase "index min = 2".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        destruct (strand_node (strand min) 0) as [n0 [n0s n0i]].
-          rewrite H1. simpl; auto. 
-        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
-          rewrite H1. simpl; auto. 
-        assert (n0 << min) as n0pred. apply (t_trans Node SSEdge n0 n1 min). 
-          constructor. constructor 2. constructor. rewrite n0s. 
-          auto. omega. constructor. constructor 2. constructor.
-          exact n1s. omega.
-        apply prednost in n0pred.
-        assert (nth_error (strand n0) (index n0) = Some (smsg n0)). 
-          apply node_indexing_equiv.
-        rewrite n0s in H6. rewrite n0i in H6. rewrite H1 in H6.
-        simpl in H6. inversion H6. symmetry in H8.
-        apply node_smsg_msg_rx in H8. rewrite H8 in n0pred.
-        assert (nth_error (strand min) (index min) = Some (smsg min)). 
-          apply node_indexing_equiv.
-         rewrite H1 in H7. rewrite H4 in H7. simpl in H7.
-         inversion H7. symmetry in H10. apply node_smsg_msg_tx in H10.
-         rewrite H10 in minst.
-         apply n0pred. constructor 3. exact minst.
-    SCase "K".
-      destruct (eq_key_dec k k0); subst. contradiction.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-        apply node_indexing_equiv.
-      rewrite H2 in H3. 
-      assert (length (strand min) = 1). rewrite H2. auto.
-      assert ((index min) = 0). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-        apply node_indexing_equiv.
-      rewrite H2 in H6. rewrite H5 in H6. simpl in H6.
-      inversion H6. symmetry in H8. apply node_smsg_msg_tx in H8.
-      rewrite H8 in minst.
-      inversion minst. contradiction.      
-    SCase "E".
-      assert (length (strand min) = 3). rewrite H1. auto.
-      assert ((index min) = 0 
-              \/ (index min) = 1 
-              \/ (index min) = 2). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-        apply node_indexing_equiv. 
-      destruct H4.
-      SSCase "index min = 0".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      destruct H4.
-      SSCase "index min = 1".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. destruct istx. rewrite <- H7 in H6.
-        inversion H6.
-      SSCase "index min = 2".
-        rewrite H1 in H5. rewrite H4 in H5. simpl in H5.
-        inversion H5. symmetry in H7. apply node_smsg_msg_tx in H7.
-        rewrite H7 in minst.
-        inversion minst; subst.
-        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
-          rewrite H1. simpl; auto.  
-        assert (n1 << min) as n1pre. constructor. constructor 2.
-          constructor. auto. omega.
-        apply prednost in n1pre.
-        assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
-          apply node_indexing_equiv.        
-        rewrite n1s in H2. rewrite H1 in H2. rewrite n1i in H2. 
-        simpl in H2. inversion H2. symmetry in H8.
-        apply node_smsg_msg_rx in H8. rewrite H8 in n1pre.
-        contradiction.
-    SCase "D".
-      assert (length (strand min) = 3). rewrite H2. auto.
-      assert ((index min) = 0 
-              \/ (index min) = 1 
-              \/ (index min) = 2). remember (index_len_node min); omega.
-      assert (nth_error (strand min) (index min) = Some (smsg min)). 
-        apply node_indexing_equiv. 
-      destruct H5.
-      SSCase "index min = 0".
-        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
-        inversion H6. symmetry in H8.
-        destruct istx. rewrite H8 in H7. inversion H7.
-      destruct H5.
-      SSCase "index min = 1".
-        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
-        inversion H6. symmetry in H8.
-        destruct istx. rewrite H8 in H7. inversion H7.
-      SSCase "index min = 2".
-        destruct (strand_node (strand min) 1) as [n1 [n1s n1i]].
-          rewrite H2. simpl; auto.  
-        assert (n1 << min) as n1pre. constructor. constructor 2.
-          constructor. auto. omega.
-        apply prednost in n1pre.
-        assert (nth_error (strand n1) (index n1) = Some (smsg n1)). 
-          apply node_indexing_equiv.        
-        rewrite n1s in H7. rewrite H2 in H7. rewrite n1i in H7. 
-        simpl in H7. inversion H7. symmetry in H9.
-        apply node_smsg_msg_rx in H9. rewrite H9 in n1pre.
-        rewrite H5 in H6. rewrite H2 in H6. simpl in H6.
-        inversion H6. symmetry in H10.
-        apply node_smsg_msg_tx in H10. rewrite H10 in minst.
-        apply n1pre. constructor. exact minst.
+  intros s. destruct (set_In_dec eq_strand_dec s Protocol); auto.
 Qed.
 
-*)
+(* Keys known to penetrators *)
+Variable PKeys : set Key.
+
+(* Texts known to penetrators (allows for nonces, etc...) *)
+Variable PTexts : set Text.
+
+Open Scope list_scope.
+Import ListNotations.
+
+Inductive DolevYao : Strand -> Prop :=
+| DY_M : forall s t, 
+           ~ set_In t PTexts ->
+           s = [ (+(!t)) ] -> 
+           DolevYao s
+| DY_F : forall s g, 
+           s = [(-g)] -> 
+           DolevYao s
+| DY_T : forall s g,
+           s = [(-g) ; (+g) ; (+g)] ->
+           DolevYao s
+| DY_C : forall s g h,
+           s = [(-g) ; (-h) ; (+g*h)] ->
+           DolevYao s
+| DY_S : forall s g h,
+           s = [(-g*h) ; (+g) ; (+h)] ->
+           DolevYao s
+| DY_K : forall s k,
+           set_In k PKeys ->
+           s = [(+ (#k))] ->
+           DolevYao s
+| DY_E : forall s h k,
+           s = [(- (#k)) ; (-h) ; (+ {h}^[k])] ->
+           DolevYao s
+| DY_D : forall s h k k',
+           Inv k' k ->
+           s = [(- (#k')) ; (- {h}^[k]) ; (+h)] ->
+           DolevYao s.
+(* [REF 1] Definition 3.1
+    The set of atomic actions/traces a penetrator
+    may perform. *)
+
+End SS.
+
+Export SS.

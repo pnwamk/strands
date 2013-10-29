@@ -6,6 +6,8 @@ Require Import ListSet List Relations_1.
 
 Section strict_order.
 
+Open Scope list_scope.
+
 Variable X : Type.
  Hypothesis Xeq_dec : forall x y : X, {x=y}+{x<>y}.
 Variable R : Relation X.
@@ -421,7 +423,7 @@ Proof.
       assert False as F. eapply Rso. exact r. inversion F. 
       split. left. reflexivity. reflexivity.
     SCase "s' = x2 :: s''".
-      assert (x2 :: s'' <> []) as notmt.
+      assert (x2 :: s'' <> nil) as notmt.
         intros contra. inversion contra.
       apply IHs' in notmt.
       destruct notmt as [m mltnil].

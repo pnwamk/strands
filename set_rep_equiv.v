@@ -3,6 +3,7 @@ Require Import Ensembles Finite_sets Finite_sets_facts.
 Require Import List ListSet.
 Require Import util.
 
+Open Scope list_scope.
 
 Section set_rep.
 

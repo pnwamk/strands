@@ -25,10 +25,3 @@ Tactic Notation "SSSSCase" constr(name) := Case_aux SSSSCase name.
 Tactic Notation "SSSSSCase" constr(name) := Case_aux SSSSSCase name.
 Tactic Notation "SSSSSSCase" constr(name) := Case_aux SSSSSSCase name.
 Tactic Notation "SSSSSSSCase" constr(name) := Case_aux SSSSSSSCase name.
-
-
-(* List Notations *)
-Notation " [ ] " := nil.
-Notation " [ x ] " := (cons x nil).
-Notation " [ x , .. , y ] " := (cons x .. (cons y nil) ..).
-Notation "x :: l" := (cons x l) (at level 60, right associativity). 
