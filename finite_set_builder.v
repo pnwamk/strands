@@ -32,7 +32,8 @@ Qed.
 Lemma ex_filter_ensemble : forall (E: Ensemble X),
 Finite X E ->
 exists E', Included X E' E 
-/\ (forall e, Ensembles.In X E' e <-> Ensembles.In X E e /\ P e).
+/\ (forall e, Ensembles.In X E' e -> Ensembles.In X E e /\ P e)
+/\ (forall e, Ensembles.In X E e /\ P e ->  Ensembles.In X E' e).
 Proof.
   intros E Efin.
   destruct (ensemble_imp_set X Xeq_dec E Efin) 
@@ -51,18 +52,18 @@ Proof.
   apply filterP in eIn. destruct eIn as [eIn Pbtrue].
   apply allIn in eIn. exact eIn.
   split.
-  intros eIn. split.
+  intros x eIn. split.
   apply allIn. apply filterP. rewrite <- Heqs'. apply allIn'.
   exact eIn.
-  assert (Pbool e = true) as Pet. eapply (filterP e s).
+  assert (Pbool x = true) as Pet. eapply (filterP x s).
   rewrite <- Heqs'. apply allIn'. exact eIn.
   rewrite HeqPbool in Pet.
-  destruct (Pdec e). exact p. inversion Pet. 
-  intros [eIn Pe].
+  destruct (Pdec x). exact p. inversion Pet. 
+  intros x [xIn Px].
   apply allIn'. rewrite Heqs'. apply filterP.
-  split. apply allIn. exact eIn.
+  split. apply allIn. exact xIn.
   rewrite HeqPbool.
-  remember (Pdec e) as popts. destruct popts. reflexivity.
+  remember (Pdec x) as popts. destruct popts. reflexivity.
   contradiction.
 Qed.
 

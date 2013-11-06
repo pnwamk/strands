@@ -18,10 +18,11 @@
  *)
 Require Import Logic List ListSet Arith Peano_dec Omega Ensembles.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
-Require Import Relation_Operators.
+Require Import Relation_Operators Operators_Properties.
 Require Import CoLoRRelDec CoLoRRelSub.
 Require Import strictorder set_rep_equiv util.
 Require Import finite_set_builder.
+Require Import LibTactics.
 
 Module SS.
 
@@ -193,12 +194,15 @@ Definition smsg (n:Node) : SMsg :=
     | exist m _ => m
   end.
 
-(* unsigned message of a node *)
-Definition msg (n:Node) : Msg :=
-  match smsg n with
+Definition smsg_msg (s:SMsg) : Msg :=
+  match s with
     | (+t) => t
     | (-t) => t
   end. 
+
+(* unsigned message of a node *)
+Definition msg (n:Node) : Msg :=
+  smsg_msg (smsg n).
 (* [REF 1] Definition 2.3.2 pg 6
    "Define uns_term(n) to be the unsigned part of the ith signed term 
     of the trace of s." *)
@@ -245,6 +249,15 @@ Proof.
   intros [[xs xn] xp] [[ys yn] yp] eq_index eq_strand.
   simpl in eq_index. simpl in eq_strand. subst.
   rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
+Qed.
+
+Lemma nodes_eq : forall x y : Node,
+x = y ->
+index(x) = index(y) /\
+strand(x) = strand(y).
+Proof.
+  intros x y xyeq.
+  subst. auto.
 Qed.
 
 Lemma node_imp_strand_nonempty : forall s n,
@@ -421,6 +434,17 @@ Proof.
 Qed.
 Hint Resolve succ_antisymmetry.
 
+Lemma single_succ : forall x y z,
+x ==> y ->
+x ==> z ->
+y = z.
+Proof.
+  intros x y z xy xz.
+  destruct xy.
+  destruct xz.
+  apply eq_nodes; auto; try omega; try congruence.
+Qed.
+
 (* succecessor multi edge (not nec. immediate succecessor) *)
 (* node's eventual succecessor -> node -> Prop *)
 Definition StrandPath : relation Node := 
@@ -455,6 +479,59 @@ Proof.
   Case "trans". omega.
 Qed.
 Hint Resolve spath_imp_index_lt.
+
+Lemma path_step_holds : forall x x' y,
+x ==>+ y ->
+x ==> x' ->
+x' = y \/ x' ==>+ y.
+Proof.
+  intros x x' y path. generalize dependent x'.
+  apply clos_trans_t1n in path.
+  induction path.
+    intros. left. eapply single_succ; eauto.
+    intros.
+    forwards*: (single_succ x y x'). subst.
+    right. apply clos_t1n_trans in path. auto.
+Qed.
+Hint Resolve path_step_holds.
+
+Lemma spath_from_props : forall x y,
+index(x) < index(y) ->
+(strand x) = (strand y) ->
+x ==>+ y.
+Proof.
+  intros x.
+  destruct x as [[xs xi] xp]. simpl in *. 
+  induction xi.
+    intros y ind streq.
+    destruct y as [[ys yi] yp]. simpl in *. 
+    induction yi. omega. 
+      destruct yi.
+        constructor. constructor. auto. simpl. reflexivity.
+        assert (snd (ys, S yi) < length (fst (ys, S yi))) as yp'. simpl. omega.
+        apply (t_trans Node Successor
+                 (exist (fun n : Strand * nat => snd n < length (fst n)) (xs, 0) xp)
+                 (exist (fun n : Strand * nat => snd n < length (fst n)) (ys, S yi) yp')
+                 (exist (fun n : Strand * nat => snd n < length (fst n)) (ys, S (S yi)) yp)).
+        apply IHyi. omega.
+        constructor. constructor. auto. simpl. omega.
+    intros y ind streq.
+    assert (snd (xs, xi) < length (fst (xs, xi))) as xp'. simpl. omega.
+    assert (exist (fun n : Strand * nat => snd n < length (fst n)) (xs, xi) xp') ==>
+         (exist (fun n : Strand * nat => snd n < length (fst n)) (xs, S xi) xp).
+      constructor. constructor. auto. simpl. omega.
+    assert (xi < index y). omega.
+    remember (IHxi xp' y H0 streq).
+    destruct (path_step_holds 
+              (exist (fun n : Strand * nat => snd n < length (fst n)) (xs, xi) xp')
+              (exist (fun n : Strand * nat => snd n < length (fst n)) (xs, S xi) xp)
+              y
+              s
+              H).
+    apply nodes_eq in H1. destruct H1. simpl in *.
+    constructor. constructor; auto. omega.
+    assumption.
+Qed.
 
 Lemma spath_irreflexivity : forall n,
 ~ n ==>+ n.
@@ -881,33 +958,36 @@ exists n, Origin t n
 (* Lemma 2.9 originating occurrence at minimal element *)
 Lemma min_origin : forall B N' n t,
 (forall m, (In Node (Nodes B) m 
-           /\ Subterm t (msg(m))) <-> 
+           /\ Subterm t (msg(m))) -> 
            In Node N' m) ->
+(forall m, In Node N' m -> 
+           (In Node (Nodes B) m 
+           /\ Subterm t (msg(m)))) ->
 set_minimal N' n ->
 Origin t n.
 Proof.
-  intros B N' n t N'def nmin.
+  intros B N' n t N'deff N'defb nmin.
   remember B as bundle.
   destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
   assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
   assert (In Node N' n) as nIn. destruct nmin; auto.
   assert (t <st (msg n)) as tsubn.
-    apply (N'def n) in nIn. destruct nIn; auto.
+    apply (N'defb n) in nIn. destruct nIn; auto.
   assert (is_tx n) as nistx.
     assert (Included Node N' N) as incl.
-      intros x xIn. apply N'def in xIn. destruct xIn; auto.
+      intros x xIn. apply N'defb in xIn. destruct xIn; auto.
     rewrite NB in incl. apply (minimal_is_tx B N' incl).
     intros x y eqmsg.
     destruct eqmsg as [xIn [yIn eqmsg]].
     split; intros Hin.
     Case "m in -> m' in".
-      apply N'def in Hin. destruct Hin as [xInN tsubx]. 
+      apply N'defb in Hin. destruct Hin as [xInN tsubx]. 
       assert (Subterm t (msg y)) as ysubt. rewrite <- eqmsg.
         exact tsubx.
-      apply N'def. split. rewrite NB. exact yIn. exact ysubt.
+      apply N'deff. split. rewrite NB. exact yIn. exact ysubt.
     Case "m' in -> m in".
-      apply N'def in Hin. destruct Hin as [yInN tsuby].
-      apply N'def. split. rewrite NB. exact xIn. 
+      apply N'defb in Hin. destruct Hin as [yInN tsuby].
+      apply N'deff. split. rewrite NB. exact xIn. 
       assert (Subterm t (msg x)) as xsubt. rewrite eqmsg.
         exact tsuby.
       exact xsubt. 
@@ -916,7 +996,7 @@ Proof.
   split. exact tsubn.
   intros n' succn' contrasub.
   assert (In Node N' n') as n'In.
-    apply N'def. split.
+    apply N'deff. split.
     destruct valE as [pairImpN HInEedge].
     apply pairImpN. left.
     destruct (sspath_imp_ssedge_l n' n succn') as [x n'edge].
@@ -1029,6 +1109,15 @@ Proof.
       contradiction.
 Qed.
 
+Fixpoint st_on_strand (t:Msg) (s:Strand) : bool :=
+match s with
+| nil => false
+| x :: xs => 
+  if st_dec t (smsg_msg x)
+  then true
+  else st_on_strand t xs
+end.
+
 (* Meta Strand Space properties/objects *)
 (* [REF 1] 
            Page 4 "One may think of a strand space as containing all the 
@@ -1046,11 +1135,11 @@ Definition RegularNode (n:Node) := RegularStrand (strand n).
 Definition PenetratorStrand (s:Strand) := ~RegularStrand s.
 Definition PenetratorNode (n:Node) := ~RegularNode n.
 Variable PenetratorModel : Strand -> Prop.
- Hypothesis penetrator_behavior : 
+ Hypothesis penetrator_behaviour : 
    forall s, PenetratorStrand s -> PenetratorModel s.
 
 Theorem align_dec : forall s,
-RegularStrand s \/ PenetratorStrand s.
+{RegularStrand s} + {PenetratorStrand s}.
 Proof.
   intros s. destruct (set_In_dec eq_strand_dec s Protocol); auto.
 Qed.
