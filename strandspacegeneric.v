@@ -65,8 +65,8 @@ Proof with eauto.
           [[g [h seq]] | 
           [[g [h seq]] | 
           [[k' [kunk seq]] | 
-          [[k' seq] | 
-          [h [k' [k'' [inv seq]]]]]]]]]]]...
+          [[h [k' seq]] | 
+          [k' [k'' [g [inv seq]]]]]]]]]]]...
     SCase "M & F".
       rewrite (particular_min_msg seq) in *...
     SCase "T".
@@ -93,51 +93,42 @@ Proof with eauto.
       rewrite (node_smsg_msg_rx pred2 h) in *.
       apply (no_st_l_r g h (#k))... intros contra. tryfalse. 
       auto. auto. auto.
-    SCase "S". (* BOOKMARK *)
+    SCase "S".
       forwards*: no_origin_after_rx.
-      edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]. eauto.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
+      edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]...
       edestruct (strand_prev_imp_pred [] min (-g * h) [(+g); (+h)]) 
-        as [pred [plt psmsg]]. 
-        simpl. auto. eauto.
+        as [pred [plt psmsg]]...
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred (g * h)) in *.
-      rewrite (node_smsg_msg_tx min (g)) in *. eauto. eauto.
-      auto.
+      rewrite (node_smsg_msg_tx min (g)) in *... auto.
       edestruct (strand_prev_imp_pred [] min (-g * h) [(+g); (+h)]) 
-        as [pred [plt psmsg]]. 
-        simpl. auto. eauto.
+        as [pred [plt psmsg]]...
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred (g * h)) in *.
-      rewrite (node_smsg_msg_tx min (h)) in *. eauto. eauto.
-      auto.
+      rewrite (node_smsg_msg_tx min (h)) in *... eauto. 
     SCase "K".
       rewrite (particular_min_msg seq) in *. simpl in *.
       forwards*: (key_st_key k k'). subst. contradiction.
     SCase "E".
-      edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]. eauto.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
+      edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
       edestruct (strand_prev_imp_pred [(-(#k'))] min (-h) [(+{h}^[k'])]) 
-        as [pred [plt psmsg]]. simpl. auto. eauto.
+        as [pred [plt psmsg]]... simpl. auto. eauto.
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred (h)) in *.
       rewrite (node_smsg_msg_tx min {h}^[k']) in *.
       forwards*: (no_encr_st (#k) h). intros neq.
       inversion neq. eauto. eauto.
     SCase "D".
-      edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]. eauto.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
-      edestruct (strand_prev_imp_pred [(-(#k''))] 
+      edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
+      edestruct (strand_prev_imp_pred [(-(#k'))] 
                                       min  
-                                      (-{h }^[ k']) 
-                                      [(+h)]) 
-        as [pred [plt psmsg]]. simpl. auto. eauto.
+                                      (-{g }^[ k'']) 
+                                      [(+g)]) 
+        as [pred [plt psmsg]]. simpl... eauto.
       forwards*: (origin_nopred_st). 
-      rewrite (node_smsg_msg_rx pred ({h}^[k'])) in *.
-      rewrite (node_smsg_msg_tx min h) in *.
-      eauto. auto. auto.
+      rewrite (node_smsg_msg_rx pred ({g}^[k''])) in *.
+      rewrite (node_smsg_msg_tx min g) in *...
+      auto.
 Qed.
 
 End SimpleSpaces.
