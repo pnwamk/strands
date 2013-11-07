@@ -28,7 +28,7 @@ Theorem non_origin_imp_non_subterm : forall B k,
 ~ set_In k PKeys ->
 (forall n, Origin (#k) n -> ~ RegularNode n) ->
 (forall n, In Node (Nodes B) n -> ~ (#k) <st msg(n)).
-Proof.
+Proof with eauto.
   intros B k notInKp noOrigin n nInN st.
   remember B as bundle.
   destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
@@ -52,55 +52,48 @@ Proof.
   Case "non-empty".
     edestruct (bundle_subset_minimal B) as [min Hmin]. 
       subst N. eauto. auto.
-    forwards: (min_origin B (Add Node N' x)). subst N. eauto. subst N. eauto.
-      eauto.
+    forwards: (min_origin B (Add Node N' x)). 
+    subst N. eauto. subst N... eauto.
     forwards*: origin_tx. forwards*: origin_st.
     forwards*: (noOrigin). forwards*: (penetrator_behaviour).
     rewrite PModel in *.
     (* Case analysis on DolevYao variants *)
-    inversion H4 as 
-        [s t tunk seq minstrand | 
-         s g seq minstrand |
-         s g seq minstrand |
-         s g h seq minstrand |
-         s g h seq minstrand |
-         s k' kunk seq minstrand |
-         s h k' seq minstrand |
-         s h k' k'' inv seq minstrand]. 
-    SCase "M".
-      rewrite (particular_min_msg seq) in *. eauto.
-    SCase "F".
-      forwards*: (tx_rx_false).
-      forwards*: (particular_min_smsg seq).
+    edestruct (DolevYao_disjunction (strand min)) 
+      as [[g [tunk seq]] | 
+          [[g seq] | 
+          [[g seq] | 
+          [[g [h seq]] | 
+          [[g [h seq]] | 
+          [[k' [kunk seq]] | 
+          [[k' seq] | 
+          [h [k' [k'' [inv seq]]]]]]]]]]]...
+    SCase "M & F".
+      rewrite (particular_min_msg seq) in *...
     SCase "T".
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | txg]. eauto.
       forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
       forwards*: equiv_disjunct.
       edestruct (strand_prev_imp_pred [] min (-g) [(+g); (+g)]) 
-        as [pred [plt psmsg]]. 
-        auto. eauto.
+        as [pred [plt psmsg]]...
       forwards*: origin_nopred_st. erewrite (node_smsg_msg_tx min g) in *.
-      rewrite (node_smsg_msg_rx pred g) in *. contradiction. 
+      rewrite (node_smsg_msg_rx pred g) in *. contradiction.
       auto. auto.
     SCase "C".
       forwards*: no_origin_after_rx.
-      edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]. eauto.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
+      edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]... 
       edestruct (strand_prev_imp_pred [] min (-g) [(-h); (+g * h)]) 
-        as [pred [plt psmsg]]. 
-        simpl. auto. eauto.
+        as [pred [plt psmsg]]...
       forwards*: (origin_nopred_st). 
       edestruct (strand_prev_imp_pred [(-g)] min (-h) [(+g * h)]) 
-        as [pred2 [p2lt p2smsg]]. simpl. auto. eauto.
+        as [pred2 [p2lt p2smsg]]...
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_tx min (g * h)) in *.
       rewrite (node_smsg_msg_rx pred g) in *.
       rewrite (node_smsg_msg_rx pred2 h) in *.
-      apply (no_st_l_r g h (#k)); auto. intros contra. inversion contra.
+      apply (no_st_l_r g h (#k))... intros contra. tryfalse. 
       auto. auto. auto.
-    SCase "S".
+    SCase "S". (* BOOKMARK *)
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]. eauto.
       forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
