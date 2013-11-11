@@ -38,7 +38,6 @@ Proof.
 Qed.
 Hint Resolve eq_strand_dec.
 
-
 Lemma node_smsg_msg_tx : forall n t,
 smsg(n) = (+ t) ->
 msg(n) = t.
@@ -222,9 +221,11 @@ Proof.
     SCase "yi = S xi". left. apply (succ x y). rewrite <- Heqxstrand.
       rewrite <- Heqystrand.  exact seq. omega.
     SCase "yi <> S xi".
-      right. intros contrasucc. apply wrongi. inversion contrasucc; subst; omega.
+      right. intros contrasucc. apply wrongi. 
+      inversion contrasucc; subst; omega.
   Case "strands neq".
-    right. intros contrasucc. apply sneq. inversion contrasucc; subst; auto.
+    right. intros contrasucc. apply sneq. 
+    inversion contrasucc; subst; auto.
 Qed.  
 Hint Resolve succ_dec.
 
@@ -351,7 +352,6 @@ Proof.
   intros i j k Hij Hjk.
   apply (t_trans Node Successor i j k Hij Hjk).
 Qed.
-Hint Resolve spath_transitivity.
 
 Lemma ssedge_dec : forall x y,
 {x =-> y} + {~x =-> y}.
@@ -421,7 +421,6 @@ Proof.
   intros i j k Hij Hjk.
   apply (t_trans Node SSEdge i j k Hij Hjk).
 Qed.
-Hint Resolve sspath_transitivity.
 
 Theorem sspatheq_opts: forall n m,
 n <<* m -> n << m \/ n = m.
@@ -927,38 +926,224 @@ Hint Resolve hd_pred_all.
 Lemma no_origin_after_rx : forall n g rest,
 (strand n) = (-g) :: rest ->
 ~Origin g n.
-Proof.
+Proof with eauto.
   intros n g rest streq orig.
-  forwards*: node_hd_or_rest.
+  edestruct (node_hd_or_rest n)...
+  assert (exists n', strand n' = strand n /\ index n' = 0) as exn'.
+  eexists (exist _ ((strand n), 0) _)... 
+  destruct exn' as [n' [seq n'indx]].
   destruct orig as [Htx [Hst Hnopred]].
-  destruct H. forwards*: tx_rx_false.
-  assert (exists n0, (index n0) = 0 /\ (strand n0) = (strand n)).
-  eexists (exist _ ((strand n), 0) _). simpl. auto.
-  destruct H0 as [n0 [n0s n0i]].
-  assert (n0 << n). apply hd_pred_all; auto.
-  (* BOOKMARK *)
-  forwards*: hd_pred_all.
-  Admitted.
+  apply (Hnopred n').
+  eapply hd_pred_all...
+  assert (index n = 0 \/ index  n > 0) as [Hi0 | Higr0]. omega.
+  forwards*: (node_indexing_equiv n).
+  rewrite streq in *. rewrite Hi0 in *.
+  simpl in *. inversion H0.
+  forwards*: tx_rx_false. auto.
+  forwards*: (node_indexing_equiv n').
+  rewrite seq in *. rewrite streq in *.
+  rewrite n'indx in *. simpl in *.
+  inversion H0.
+  forwards*: node_smsg_msg_rx. subst. auto.
+Grab Existential Variables.
+  simpl. rewrite streq. simpl. auto with v62.
+Qed.
 Hint Resolve no_origin_after_rx.
-
-Lemma origin_imp_st_strand : forall t x s,
-Origin t x ->
-strand x = s ->
-st_on_strand t s = true.
-Proof.
-  Admitted.
-Hint Resolve origin_imp_st_strand.
 
 Lemma equiv_disjunct : forall p,
 p \/ p -> p.
 Proof. intros. iauto. Qed.
 
+Lemma smsg_not_in_single_list : forall n x y,
+smsg n = x ->
+x <> y ->
+~ List.In (smsg n) [y].
+Proof.
+  intros n x y smsgeq neq notIn.
+  rewrite smsgeq in *. inversion notIn; tryfalse.
+Qed.
+Hint Resolve smsg_not_in_single_list.
+
+Lemma tx_neq_rx : forall x y,
+(+x) <> (-y).
+Proof.
+  intros x y contra. inversion contra.
+Qed.
+Hint Resolve tx_neq_rx.
+
+Lemma rx_neq_tx : forall x y,
+(-x) <> (+y).
+Proof.
+  intros x y contra. inversion contra.
+Qed.
+Hint Resolve rx_neq_tx.
+
+Lemma key_neq_join : forall k x y,
+(#k) <> x * y.
+Proof.
+  intros k x y contra. inversion contra.
+Qed.
+Hint Resolve key_neq_join.
+
+Lemma key_neq_encr : forall k x y,
+(#k) <> {x}^[y].
+Proof.
+  intros k x y contra. inversion contra.
+Qed.
+Hint Resolve key_neq_encr.
+
+Lemma key_neq_txt : forall k t,
+(#k) <> (!t).
+Proof.
+  intros k t contra. inversion contra.
+Qed.
+Hint Resolve key_neq_txt.
+
+
+Lemma txt_neq_join : forall t x y,
+(!t) <> x * y.
+Proof.
+  intros t x y contra. inversion contra.
+Qed.
+Hint Resolve txt_neq_join.
+
+Lemma txt_neq_encr : forall t x y,
+(!t) <> {x}^[y].
+Proof.
+  intros t x y contra. inversion contra.
+Qed.
+Hint Resolve txt_neq_encr.
+
+Lemma txt_neq_key : forall t k,
+(!t) <> (#k).
+Proof.
+  intros t k contra. inversion contra.
+Qed.
+Hint Resolve txt_neq_key.
+
+Lemma strand_imp_smsg_in_strand : forall n s,
+strand n = s ->
+List.In (smsg n) s.
+Proof.
+  intros n s seq.
+  eauto.
+Qed.
+
+Lemma value_Some {X:Type}: forall x y : X,
+value x = Some y -> x = y.
+Proof.
+  intros x y vSeq. inversion vSeq. auto.
+Qed.
+Hint Resolve value_Some.
+
+Lemma nth_error_nil_error : forall X i,
+nth_error (nil : list X) i = None.
+Proof.
+  intros X i.
+  induction i. auto.
+  auto.
+Qed.
+Hint Resolve nth_error_nil_error.
+
+Lemma nth_error_nth {X:Type} : forall l i (v d : X),
+  nth_error l i = Some v -> nth i l d = v.
+  intros l.
+  induction l.
+  intros i v d ntherr.
+  rewrite (nth_error_nil_error X i) in *. tryfalse.
+  destruct i. simpl in *. auto. simpl in *.
+  apply IHl.
+Qed.  
+Hint Resolve nth_error_nth.
+
+
+Lemma strand_index_leq : forall x sf sb,
+strand x = sf ++ sb ->
+index x < length sf ->
+List.In (smsg x) sf.
+Proof.
+  intros x sf sb seq indle.
+  forwards*: (node_indexing_equiv x).
+  rewrite seq in *.
+  forwards: (nth_error_nth (sf ++ sb) (index x) (smsg x)). auto.
+  forwards*: (nth_In).
+  erewrite app_nth1 in *. rewrite <- H0. eauto. auto.  
+Grab Existential Variables. exact (smsg x).
+Qed.
+Hint Resolve strand_index_leq.
+
+
+Lemma strand_halfs_index : forall x sf sb,
+strand x = sf ++ sb ->
+~ List.In (smsg x) sf ->
+index x >= length sf.
+Proof.
+  intros x sf sb seq notIn.
+  forwards*: (node_smsg_in_strand x).
+  edestruct (in_app_or) as [insf | insb]. eauto.
+  tryfalse.
+  assert (index x < length sf \/ index x >= length sf) as lenopts. omega.
+  destruct lenopts.
+  forwards*: strand_index_leq. auto.
+Qed.
+
+Lemma nth_app_snd : forall X (l1 l2: list X) i,
+i >= length l1 ->
+nth_error (l1 ++ l2) i = nth_error l2 (i - length l1).
+Proof.
+  intros X l1. 
+  induction l1.
+  intros l2 i len_gr.
+  simpl. rewrite <- (minus_n_O i). reflexivity.
+  intros l2 i i_gr_l.
+  destruct i.
+  inversion i_gr_l.
+  simpl.
+  apply IHl1. inversion i_gr_l.
+  omega. subst. simpl in H0. omega.
+Qed.
+
+Lemma prev_facts_imp_prev : forall x y,
+strand x = strand y ->
+index x < index y ->
+x << y.
+Proof.
+  intros x y seq indlt.
+  forwards*: spath_from_props.
+Qed.
+Hint Resolve prev_facts_imp_prev.
+
 Lemma strand_prev_imp_pred : forall f n x xs,
 strand n = f ++ x :: xs ->
-smsg n <> x ->
+~ List.In (smsg n) f ->
+(smsg n) <> x ->
 exists n', n' << n /\ smsg n' = x.
 Proof.
-  Admitted.
+  intros f n x xs seq notIn neq.
+  forwards*: (node_smsg_in_strand n).
+  rewrite seq in *.
+  edestruct (in_app_or) as [contra | inxxs]. eauto.
+  tryfalse. destruct inxxs. tryfalse.
+  remember (strand_halfs_index n f (x :: xs) seq notIn) as greq.
+  inversion greq.
+  forwards: (node_indexing_equiv n).
+  subst. rewrite seq in *. rewrite <- H2 in *.
+  forwards*: strand_halfs_index.
+  erewrite (nth_app_snd SMsg f (x :: xs)) in *.
+  rewrite minus_diag in *.
+  simpl in *. forwards*: (value_Some (smsg n) x).
+  forwards: (node_indexing_equiv n).
+  subst. rewrite seq in *. rewrite <- H1 in *.
+  forwards*: strand_halfs_index.
+  destruct (strand_node (strand n) (length f)) as [n' [ns ni]]. rewrite seq.
+  rewrite app_length. simpl. omega.
+  exists n'. split.
+  apply prev_facts_imp_prev. auto. omega.
+  forwards*: (node_indexing_equiv n').
+  rewrite ni in *. rewrite seq in *. rewrite ns in *.
+  erewrite (nth_app_snd SMsg f (x :: xs)) in *.
+  rewrite minus_diag in *.  simpl in *. eauto. omega.
+Qed.
 Hint Resolve strand_prev_imp_pred.
 
 Lemma no_st_l_r : forall l r t,

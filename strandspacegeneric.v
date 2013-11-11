@@ -1,4 +1,3 @@
-
 Require Import Logic List ListSet Arith Peano_dec Omega Ensembles.
 Require Import Coq.Sets.Constructive_sets.
 Require Import Finite_sets_facts Finite_sets Relation_Definitions.
@@ -91,8 +90,7 @@ Proof with eauto.
       rewrite (node_smsg_msg_tx min (g * h)) in *.
       rewrite (node_smsg_msg_rx pred g) in *.
       rewrite (node_smsg_msg_rx pred2 h) in *.
-      apply (no_st_l_r g h (#k))... intros contra. tryfalse. 
-      auto. auto. auto.
+      apply (no_st_l_r g h (#k))... auto. auto. auto.
     SCase "S".
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]...
@@ -105,26 +103,25 @@ Proof with eauto.
         as [pred [plt psmsg]]...
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred (g * h)) in *.
-      rewrite (node_smsg_msg_tx min (h)) in *... eauto. 
+      rewrite (node_smsg_msg_tx min (h)) in *... auto.
     SCase "K".
       rewrite (particular_min_msg seq) in *. simpl in *.
       forwards*: (key_st_key k k'). subst. contradiction.
     SCase "E".
       edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
       edestruct (strand_prev_imp_pred [(-(#k'))] min (-h) [(+{h}^[k'])]) 
-        as [pred [plt psmsg]]... simpl. auto. eauto.
+        as [pred [plt psmsg]]...
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred (h)) in *.
       rewrite (node_smsg_msg_tx min {h}^[k']) in *.
-      forwards*: (no_encr_st (#k) h). intros neq.
-      inversion neq. eauto. eauto.
+      forwards*: (no_encr_st (#k) h). auto. auto.
     SCase "D".
       edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
       edestruct (strand_prev_imp_pred [(-(#k'))] 
                                       min  
                                       (-{g }^[ k'']) 
                                       [(+g)]) 
-        as [pred [plt psmsg]]. simpl... eauto.
+        as [pred [plt psmsg]]. auto. eauto. eauto.
       forwards*: (origin_nopred_st). 
       rewrite (node_smsg_msg_rx pred ({g}^[k''])) in *.
       rewrite (node_smsg_msg_tx min g) in *...
