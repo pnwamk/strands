@@ -11,7 +11,7 @@ Require Import strandspace strandlib.
 Section SimpleSpaces.
 
 Hypothesis PModel : PenetratorModel = DolevYao.
-
+.
 Open Scope list_scope.
 Import ListNotations.
 Open Scope ss_scope.

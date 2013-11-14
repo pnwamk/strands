@@ -15,8 +15,6 @@ Open Scope ss_scope.
 
 Hint Resolve Coq.Sets.Constructive_sets.Add_not_Empty Noone_in_empty.
 
-
-
 Definition eq_msg_dec : forall x y : Msg,  
   {x = y} + {x <> y}.
 Proof.
@@ -182,6 +180,50 @@ Proof.
 Qed.
 Hint Resolve comm_dec.
 
+Lemma comm'_dec : forall N x y,
+{x -[N]-> y} + {~ x -[N]-> y}.
+Proof.
+  intros N x y.
+  destruct (comm_dec x y).
+  left. constructor.
+Admitted. 
+
+(*
+  intros N x y.
+  forwards*: (comm_dec x y).
+  remember (smsg x) as xsmsg. remember (smsg y) as ysmsg.
+  remember (strand x) as xstrand. remember (strand y) as ystrand.
+  destruct xsmsg.
+  Case "x (tx m)".
+    destruct ysmsg.
+    SCase "y (tx m0)".
+      right. intros contracomm. inversion contracomm; subst.
+      destruct H as [[xtx yrx] strandneq].
+      rewrite <- Heqysmsg in yrx. inversion yrx.      
+    SCase "y (rx m0)".
+      destruct (eq_msg_dec m m0) as [msgeq | msgneq].
+      SSCase "m = m0".
+        destruct (eq_strand_dec xstrand ystrand) as [strandeq | strandneq].
+        SSSCase "strands eq".
+          right. intros contracomm.
+          inversion contracomm; subst. destruct H as [msgs strandsneq].
+          apply strandsneq. exact strandeq. 
+        SSSCase "strands neq".
+          subst m0. left.
+          apply (comm x y m). split. split.
+          auto. auto. subst. exact strandneq.        
+      SSCase "m <> m0".
+        right. intros contracomm. inversion contracomm; subst. 
+        destruct H as [[xtx yrx] strandneq].
+        apply msgneq. rewrite <- Heqxsmsg in xtx.
+        rewrite <- Heqysmsg in yrx. inversion xtx; subst. 
+        inversion yrx; subst. reflexivity.
+  Case "x (rx m)".
+    right.
+    intros contracomm. inversion contracomm; subst.
+    destruct H as [[xtx yrx] strandneq].
+    rewrite <- Heqxsmsg in xtx. inversion xtx.
+Qed. *)
 
 Theorem comm_irreflexivity : forall n,
 ~ n --> n.
@@ -374,6 +416,12 @@ Proof.
 Qed.
 Hint Resolve ssedge_dec.
 
+Lemma ssedge'_dec : forall N x y,
+{x =[N]-> y} + {~x =[N]-> y}.
+Proof.
+Admitted.
+
+
 Theorem ssedge_irreflexivity : forall n,
 ~ n =-> n.
 Proof.
@@ -451,18 +499,36 @@ Proof.
     exact Hij2. exact Hjk.
 Qed.
 
+Lemma comm_imp_rx : forall x y,
+x --> y ->
+is_rx y.
+Proof.
+  intros x y cedge.
+  destruct cedge as [x y m [[tx rx] sneq]].
+  exists m. auto.
+Qed.  
+Hint Resolve comm_imp_rx.
+
+Lemma comm_imp_tx : forall x y,
+x --> y ->
+is_tx x.
+Proof.
+  intros x y cedge.
+  destruct cedge as [x y m [[tx rx] sneq]].
+  exists m. auto.
+Qed.  
+Hint Resolve comm_imp_tx.
 
 Lemma bundle_ssedge_inclusion : forall (B: Bundle) (n m: Node),
 n =-> m ->
-(In Node (Nodes B) n <-> In Node (Nodes B) m).
+In Node (Nodes B) m -> In Node (Nodes B) n.
 Proof.
-  intros B n m ssedge. split; intros Hin.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
-  apply valE in ssedge. apply valE. constructor 2.
-  exists n. exact ssedge.
-  destruct B as [N E finN finE valE uniqtx acyc].
-  apply valE in ssedge. apply valE. constructor 1.
-  exists m. exact ssedge.
+  intros B n m ssedge Hin.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
+  destruct ssedge. 
+  destruct (comm_imp_rx n m). auto.
+  destruct (uniqtx m x) as [[n' [n'tx [n'edge n'In]]] uniqtx']. auto. auto.
+  forwards*: (uniqtx' n n'). subst. apply valE. constructor. eauto. eauto.
 Qed.
 Hint Resolve bundle_ssedge_inclusion.
 
@@ -488,12 +554,28 @@ Proof.
 Qed.  
 Hint Resolve sspath_imp_ssedge_r.
 
+Lemma In_Finite_set_dec {X:Type} : forall E x,
+(forall x y : X, {x=y} + {x<>y}) ->
+Finite X E ->
+{In X E x} + {~In X E x}.
+Proof.
+  intros E x Xeq_dec finE.
+  destruct finE.
+  apply finite_cardinal in finE. destruct finE.
+  eapply cardinal_invert in finE.
+  remember (ensemble_imp_set X Xeq_dec E finE).
+  
+destruct (ensemble_imp_set X Xeq_dec E finE) 
+    as [s [inAll [nodup [n [slen scard]]]]].
+
+(* BOOKMARK, likely required for all set-relations decidability *)
+
 Lemma restricted_to_set : forall (B:Bundle),
-exists s, is_restricted SSEdge s /\
+exists s, is_restricted (SSEdge' (Nodes B)) s /\
 forall x, ListSet.set_In x s <-> In Node (Nodes B) x.
 Proof.
   intros B.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
   destruct valE as [EimpInN EimpSSEdge].
   destruct (ensemble_imp_set Node eq_node_dec N finN) 
     as [s [inAll [nodup [n [slen scard]]]]].
@@ -514,11 +596,27 @@ is_restricted SSEdge s ->
 forall x y, {x << y} + {~x << y}.
 Proof.
   intros B s bset restrict.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
   intros x y.
   remember (restricted_dec_clos_trans_dec 
               eq_node_dec 
               ssedge_dec 
+              restrict) as alldec.
+  apply alldec.
+Qed.
+Hint Resolve sspath_dec.
+
+Lemma sspath'_dec : forall (B: Bundle) (s: ListSet.set Node),
+node_set_Ensemble_equiv s (Nodes B) ->
+is_restricted (SSEdge' (Nodes B)) s ->
+forall x y, {x <{B}< y} + {~x <{B}< y}.
+Proof.
+  intros B s bset restrict.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
+  intros x y.
+  remember (restricted_dec_clos_trans_dec 
+              eq_node_dec 
+              (ssedge'_dec N)
               restrict) as alldec.
   apply alldec.
 Qed.
@@ -591,7 +689,7 @@ Proof.
     eapply rt_trans. exact xy. exact yz.
   Case "AntiSymmetry".
     intros x y xy yz.
-    destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+    destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
     destruct (eq_node_dec x y) as [xyeq | xyneq].
     SCase "x = y". exact xyeq.
     SCase "x <> y". 
@@ -605,7 +703,7 @@ Lemma sspath_strict_order : forall (B: Bundle),
 StrictOrder Node SSPath.
 Proof.
   intros B.
-  destruct B as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
   split.
   Case "Irreflexivity".
     intros x. apply acyc.
@@ -613,6 +711,20 @@ Proof.
     apply sspath_transitivity.
 Qed.
 Hint Resolve sspath_strict_order.
+
+Lemma sspath'_strict_order : forall (B: Bundle),
+StrictOrder Node (SSPath' (Nodes B)).
+Proof.
+  intros B.
+  destruct B as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
+  split.
+  Case "Irreflexivity".
+    intros x. apply acyc.
+  Case "Transitivity".
+    apply sspath_transitivity.
+Qed.
+Hint Resolve sspath_strict_order.
+
 
 (* Lemma 2.7b (non-empty subsets contain minimal members) *)
 Lemma bundle_subset_minimal : forall B N',
@@ -622,19 +734,17 @@ exists min, set_minimal N' min.
 Proof.
   intros B N' incl nempty.
   remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
-  assert (Finite Node N') as finN'. eapply Finite_downward_closed.
-    exact finN. exact incl.
-  destruct (finite_cardinal Node N' finN') as [n card].
-  destruct n. inversion card. rewrite H in nempty.
-  assert False as F. apply nempty. reflexivity. inversion F.
+  destruct bundle as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
+  forwards*: (Finite_downward_closed Node N finN N' incl).
+  edestruct (finite_cardinal Node N') as [n card]. auto.
+  destruct n. inversion card. tryfalse.
   destruct (restricted_to_set B) as [s [restricted setequiv]].
-  assert (forall x y, {x << y} + {~ x << y}) as rdec.
-  apply (sspath_dec B s). exact setequiv. exact restricted.  
+  assert (forall x y, {x <{B}< y} + {~ x <{B}< y}) as rdec.
+  apply (sspath'_dec B s). exact setequiv. exact restricted.  
   destruct (minimal_finite_ensemble_mem 
               Node 
               eq_node_dec 
-              SSPath 
+              (SSPath' (Nodes B))
               rdec
               (sspath_strict_order B) 
               N' 
@@ -656,7 +766,7 @@ is_tx n.
 Proof.
   intros B N' sub incl n setmin.
   remember B as bundle.
-  destruct bundle as [N E finN finE valE uniqtx acyc]; simpl in *.
+  destruct bundle as [N E finN finE valE predIncl uniqtx acyc]; simpl in *.
   assert ((Nodes B) = N) as NB. subst B. simpl. reflexivity.
   remember (smsg n) as nsmsg. symmetry in Heqnsmsg.
   destruct nsmsg.
