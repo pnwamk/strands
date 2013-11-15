@@ -20,7 +20,6 @@ Require Import Logic List ListSet Arith Peano_dec Omega.
 Require Import Relation_Definitions Relation_Operators.
 Require Import CoLoRRelDec CoLoRRelSub.
 Require Import strictorder set_rep_equiv util.
-Require Import finite_set_builder.
 Require Import LibTactics.
 
 Module SS.
@@ -193,7 +192,6 @@ Inductive Comm : relation Node :=
                           /\ smsg(m) = (-t))
                          /\ strand(n) <> strand(m))
                         -> Comm n m.
-Hint Constructors Comm.
 (* [REF 1] Definition 2.3.3 pg 6
    "there is an edge n1 -> n2 iff term(n1) = +a and term(n2) = -a ... 
    recording a potential causal link between those strands**"
@@ -206,40 +204,13 @@ Hint Constructors Comm.
 Notation "a --> b" := (Comm a b) (at level 0, right associativity)  : ss_scope.
 
 Inductive Comm' : set Node -> relation Node :=
-| comm' : forall N n m, In n N ->
-                        In m N ->
+| comm' : forall N n m, set_In n N ->
+                        set_In m N ->
                         n --> m ->
                         Comm' N n m.
-Hint Constructors Comm'.
 
 Notation "a -[ N ]-> b" := (Comm' N a b) (at level 0, right associativity)  : ss_scope.
 
-Lemma comm'_in_l : forall N x y,
-x -[N]-> y ->
-In x N.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve comm'_in_l.
-
-Lemma comm'_in_r : forall N x y,
-x -[N]-> y ->
-In y N.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve comm'_in_r.
-
-Lemma comm'_imp_comm : forall N x y,
-x -[N]-> y ->
-x --> y.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve comm'_imp_comm.
 
 (* successor edge *)
 (* node's direct predecessor -> node -> Prop *)
@@ -254,39 +225,12 @@ Inductive Successor : relation Node :=
 Notation "a ==> b" := (Successor a b)  (at level 0, right associativity) : ss_scope. 
 
 Inductive Successor' : set Node -> relation Node :=
-| succ' : forall N n m, In n N ->
-                        In m N ->
+| succ' : forall N n m, set_In n N ->
+                        set_In m N ->
                         n ==> m ->
                         Successor' N n m.
-Hint Constructors Successor'.
 
 Notation "a =[ N ]=> b" := (Successor' N a b)  (at level 0, right associativity) : ss_scope. 
-Lemma succ'_in_l : forall N x y,
-x =[N]=> y ->
-In x N.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve succ'_in_l.
-
-Lemma succ'_in_r : forall N x y,
-x =[N]=> y ->
-In y N.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve succ'_in_r.
-
-Lemma succ'_imp_succ : forall N x y,
-x =[N]=> y ->
-x ==> y.
-Proof.
-  intros n x y edge.
-  inversion edge; subst; auto.
-Qed.
-Hint Resolve succ'_imp_succ.
 
 (* succecessor multi edge (not nec. immediate succecessor) *)
 (* node's eventual succecessor -> node -> Prop *)
@@ -304,35 +248,6 @@ clos_trans (Successor' N) .
 
 Notation "a =[ N ]=>+ b" := (StrandPath' N a b)  (at level 0, right associativity) : ss_scope. 
 
-Lemma spath'_in_l : forall N x y,
-x =[N]=>+ y ->
-In x N.
-Proof.
-  intros n x y edge.
-  induction edge; subst; eauto. 
-Qed.
-Hint Resolve spath'_in_l.
-
-Lemma spath'_in_r : forall N x y,
-x =[N]=>+ y ->
-In y N.
-Proof.
-  intros n x y edge.
-  induction edge; subst; eauto.
-Qed.
-Hint Resolve spath'_in_r.
-
-Lemma spath'_imp_spath : forall N x y,
-x =[N]=>+ y ->
-x ==>+ y.
-Proof.
-  intros N x y edge.
-  induction edge.
-  constructor. eauto.
-  eapply (t_trans Node Successor x y z IHedge1 IHedge2).
-Qed.
-Hint Resolve spath'_imp_spath.
-
 Definition SSEdge : relation Node :=
 union Comm Successor.
 Hint Constructors or.
@@ -343,35 +258,6 @@ Definition SSEdge' (N:set Node) : relation Node :=
 union (Comm' N) (Successor' N).
 
 Notation "a =[ N ]-> b" := (SSEdge' N a b) (at level 0, right associativity) : ss_scope.
-
-Lemma ssedge'_in_l : forall N x y,
-x =[N]-> y ->
-In x N.
-Proof.
-  intros n x y edge.
-  induction edge; subst; eauto. 
-Qed.
-Hint Resolve ssedge'_in_l.
-
-Lemma ssedge'_in_r : forall N x y,
-x =[N]-> y ->
-In y N.
-Proof.
-  intros n x y edge.
-  induction edge; subst; eauto.
-Qed.
-Hint Resolve ssedge'_in_r.
-
-Lemma ssedge'_imp_ssedge : forall N x y,
-x =[N]-> y ->
-x =-> y.
-Proof.
-  intros N x y edge.
-  induction edge.
-  constructor. eauto.
-  constructor 2. eauto.
-Qed.
-Hint Resolve ssedge'_imp_ssedge.
 
 (* transitive closure of edges. *)
 Definition SSPath : relation Node := 
@@ -384,78 +270,17 @@ clos_trans (SSEdge' N).
 
 Notation "a <[ N ]< b" := (SSPath' N a b) (at level 0, right associativity) : ss_scope.
 
-Lemma sspath'_in_l : forall N x y,
-x <[N]< y ->
-In x N.
-Proof.
-  intros N x y edge.
-  induction edge; subst; eauto. 
-Qed.
-Hint Resolve sspath'_in_l.
-
-Lemma sspath'_in_r : forall N x y,
-x <[N]< y ->
-In x N.
-Proof.
-  intros N x y edge.
-  induction edge; subst; eauto.
-Qed.
-Hint Resolve sspath'_in_r.
-
-Lemma sspath'_imp_sspath : forall N x y,
-x <[N]< y ->
-x << y.
-Proof.
-  intros N x y edge.
-  induction edge.
-  constructor. eauto.
-  eapply (t_trans Node SSEdge x y z); eauto.
-Qed.
-Hint Resolve sspath'_imp_sspath.
-
 (* transitive reflexive closure of edges. *)
 Definition SSPathEq : relation Node :=
 clos_refl_trans SSEdge.
-Hint Constructors clos_refl_trans.
 
 Notation "a <<* b" := (SSPathEq a b) (at level 0, right associativity) : ss_scope.
 
 Inductive SSPathEq' (N:set Node) : relation Node :=
-| sspatheq'_refl : forall n, In n N -> SSPathEq' N n n
+| sspatheq'_refl : forall n, set_In n N -> SSPathEq' N n n
 | sspatheq'_trans : forall n m, n <[N]< m -> SSPathEq' N n m.
-Hint Constructors SSPathEq'.
 
 Notation "a <[ N ]<* b" := (SSPathEq' N a b) (at level 0, right associativity) : ss_scope.
-
-Lemma sspatheq'_in_l : forall N x y,
-x <[N]<* y ->
-In x N.
-Proof.
-  intros N x y edge.
-  induction edge; subst; eauto. 
-Qed.
-Hint Resolve sspatheq'_in_l.
-
-Lemma sspatheq'_in_r : forall N x y,
-x <[N]< y ->
-In y N.
-Proof.
-  intros N x y edge.
-  induction edge; subst; eauto.
-Qed.
-Hint Resolve sspatheq'_in_r.
-
-Lemma sspatheq'_imp_sspatheq : forall N x y,
-x <[N]<* y ->
-x <<* y.
-Proof.
-  intros N x y edge.
-  induction edge.
-  apply rt_refl.
-  induction H. constructor. eauto.
-  eapply (rt_trans Node SSEdge x y z); eauto.
-Qed.
-Hint Resolve sspatheq'_imp_sspatheq.
 
 (* In for members of pairs *)
 Inductive InPair {X:Type} (x:X) (E:set (X*X)): Prop :=
@@ -470,27 +295,31 @@ Record Bundle : Type := Bundle_def
   (* Prop 1 - A bundle is a finite portion of a strand space *)
   Nodes : set Node;
   Edges : set Edge;
+  NodesSetP : NoDup Nodes;
+  EdgesSetP : NoDup Edges;
   ValidEdges:
     (* N is the set of nodes incident with any edge in E *)
-    (and (forall x, InPair x Edges -> In x Nodes)
+    (and (forall x, InPair x Edges -> set_In x Nodes)
     (* membership in Edge is equiv to an actual edge 
       (assuming set membership) *)
-    (forall x y, In (x,y) Edges <-> x =[Nodes]-> y));
+    (forall x y, set_In (x,y) Edges <-> x =[Nodes]-> y));
   PredIncl:
     (* Prop 3 - Predececcors on a strand are included *)
-    (forall x y, In y Nodes -> x ==> y -> x =[Nodes]=> y);
-  ExistsUniqueTx:   
-    (forall z m, In z Nodes ->
+    (forall x y, set_In y Nodes -> x ==> y -> x =[Nodes]=> y);
+  TxIncl:
+    (* Prop 2 - Transmitter is in Bundle *)
+    (forall x y, set_In y Nodes -> x --> y -> x -[Nodes]-> y);
+  ExistsUniqueTx:
+    (* Prop 2 - Rx implies there exists a unique Tx *)
+    (forall z m, set_In z Nodes ->
                  smsg(z) = (- m) -> 
-                 (* Prop 2 - there exists a transmitter *)
-                 (exists x, (smsg(x) = (+ m)
-                             /\ x -[Nodes]-> z
-                             /\ In (x,z) Edges))
+                 (* there exists a transmitter *)
+                 (exists x, x -[Nodes]-> z)
                  (* Prop 2 - a transmitter is unique *)
                  /\ (forall x y, x --> z ->
                                  y --> z ->
                                  x = y));
-  (* Prop 4 *)
+  (* Prop 4 - The Bundle is acyclic*)
   Acyclic: forall x, ~ x <[Nodes]< x
 }.
 
@@ -507,9 +336,10 @@ Notation "a <{ B }< b"
 Notation "a <{ B }<* b" 
   := (SSPathEq' (Nodes B) a b) (at level 0, right associativity) : ss_scope.
 
-Definition set_minimal (N:set Node) (n:Node) : Prop :=
-In n N /\
-(forall x, ~ x <[N]< n).
+Definition set_minimal (B:Bundle) (N:set Node) (n:Node) : Prop :=
+subset N (Nodes B) /\
+set_In n N /\ 
+forall n', set_In n' N -> ~ n' <{B}< n.
 
 Definition OccursIn (t:Msg) (n:Node) : Prop :=
  t <st msg(n).
@@ -517,6 +347,14 @@ Definition OccursIn (t:Msg) (n:Node) : Prop :=
    "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
 (* Bookmark *)
 
+Definition EntryPoint (n:Node) (tP: Msg -> Prop) : Prop := 
+exists t, tP t /\ smsg n = (+t) 
+/\ forall n', n' ==>+ n -> ~ tP (msg n').
+
+Definition Origin (t:Msg) (n:Node) : Prop :=
+EntryPoint n (fun t' => t <st t').
+
+(*
 Section OriginAlt.
 Require Import Ensembles.
 
@@ -542,7 +380,7 @@ Definition Origin (t:Msg) (n:Node) : Prop :=
 is_tx n
 /\ t <st msg(n)
 /\ forall n', n' << n -> ~t <st msg(n').
-
+*)
 Definition UniqOrigin (t:Msg) : Prop :=
 exists n, Origin t n
 /\ forall m, Origin t m -> n = m.

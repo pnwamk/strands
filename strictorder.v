@@ -3,6 +3,7 @@ Require Import List ListSet.
 Require Import util set_rep_equiv.
 
 Require Import ListSet List Relations_1.
+Require Import LibTactics.
 
 Section strict_order.
 
@@ -407,11 +408,10 @@ Proof.
 Qed.
 
 Lemma exists_empty_lt_set : forall s,
-NoDup s ->
 s <> nil ->
 exists x, set_In x s /\ lt_set x s = nil.
 Proof.
-  intros s nodup notempty.
+  intros s notempty.
   induction s as [| x1 s'].
   Case "s = []".
     assert False as F. apply notempty. reflexivity. inversion F.
@@ -465,30 +465,24 @@ Proof.
         destruct mltnil as [mltnilIn mltnil].
         simpl. destruct (Rdec x1 m). contradiction. 
         exact mltnil.
-        inversion nodup; auto.
 Qed.
 
-Lemma minimal_finite_ensemble_mem : 
-  forall E n,
-    cardinal X E (S n) ->
-    exists min, InSet X E min /\ 
-                forall y, InSet X E y -> ~R y min.
+Theorem minimal_set_mem :
+  forall (s: set X), 
+    s = nil \/ (exists min, set_In min s /\ 
+                           forall y, set_In y s -> ~R y min).
 Proof.
-  intros E n card.
-  assert (Finite X E) as finE.
-  eapply cardinal_finite. exact card.
-  destruct (ensemble_imp_set X Xeq_dec E finE) 
-    as [s [allIn [nodup [i [slen scard]]]]].
-  assert (s <> nil) as nonil.
-  intros contra. subst s. simpl in slen. subst i. inversion scard. subst E.
-  inversion card. symmetry in H. apply not_Empty_Add in H. inversion H.
-  destruct (exists_empty_lt_set s nodup nonil) as [min [minIn ltnil]].
-  exists min.
-  split. apply allIn. exact minIn.
-  intros y yIn contraR.
-  assert (set_In y s) as yIns. apply allIn. exact yIn.
-  apply (lt_set_rel_equiv min y s yIns) in contraR.
-  rewrite ltnil in contraR.
+  intros s.
+  destruct s.
+  left; auto.
+  right.
+  edestruct (exists_empty_lt_set (x::s)).
+  intros contra. inversion contra.
+  destruct H.
+  exists x0. split; auto.
+  intros y yIn contraR. 
+  forwards*: (lt_set_rel_equiv x0 y).
+  apply H1 in contraR. rewrite H0 in contraR.
   inversion contraR.
 Qed.
 

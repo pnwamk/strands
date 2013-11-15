@@ -1,7 +1,8 @@
 
 Require Import Ensembles Finite_sets Finite_sets_facts.
 Require Import List ListSet.
-Require Import util set_rep_equiv.
+Require Import util set_rep_equiv strandlib.
+Require Import LibTactics.
 
 Open Scope list_scope.
 
@@ -28,6 +29,37 @@ Proof.
   apply IHs. inversion nodup; auto.
   apply IHs. inversion nodup; auto.
 Qed.  
+
+Lemma ex_filter_set : forall s,
+exists s', subset s' s /\
+forall x, set_In x s' <-> set_In x s /\ P x.
+Proof.
+  intros s.
+  induction s.
+  exists (nil : list X).
+  split. intros x y. tryfalse.
+  split. intros xIn. tryfalse.
+  intros [xIn Px]. tryfalse.
+  destruct IHs as [s' [Hsub HallP]].
+  destruct (Pdec a).
+  exists (a :: s').
+  split. intros x Hin.
+  destruct Hin. subst. left; reflexivity.
+  right. eauto.
+  split.
+  intros Hin.
+  destruct Hin. subst. split; auto. left. auto.
+  split. right. auto. apply HallP. auto.
+  intros H.
+  destruct H. destruct H. subst. left. reflexivity.
+  right. apply HallP. auto.
+  exists s'. split.
+  right. auto.
+  split; intros.
+  split. right. apply HallP. auto. apply HallP. auto.
+  destruct H. destruct H. subst. tryfalse.
+  apply HallP. auto.
+Qed. 
 
 Lemma ex_filter_ensemble : forall (E: Ensemble X),
 Finite X E ->
