@@ -48,8 +48,10 @@ Proof with eauto.
     destruct (N'P m) as [inImpst stImpIn].
     forwards: (stImpIn). auto. auto.
     split. auto. apply N'P. auto. auto.
-    forwards*: origin_tx. forwards*: origin_st.
-    forwards*: (noOrigin). forwards*: (penetrator_behaviour).
+    forwards: origin_tx. eassumption. 
+    forwards: origin_st. eassumption.
+    forwards: (noOrigin). eassumption. forwards: (penetrator_behaviour).
+    eassumption.
     rewrite PModel in *.
     (* Case analysis on DolevYao variants *)
     edestruct (DolevYao_disjunction (strand min)) 
@@ -60,19 +62,20 @@ Proof with eauto.
           [[g [h seq]] | 
           [[k' [kunk seq]] | 
           [[h [k' seq]] | 
-          [k' [k'' [g [inv seq]]]]]]]]]]]...
+          [k' [k'' [g [inv seq]]]]]]]]]]]. auto.
     SCase "M & F".
-      rewrite (particular_min_msg seq) in *...
+      rewrite (particular_min_msg seq) in *... eauto.
     SCase "T".
-      forwards*: no_origin_after_rx.
+      forwards: no_origin_after_rx. eauto.
       edestruct (node_strand_3height_opts) as [rxg | txg]. eauto.
-      forwards*: tx_rx_false; forwards*: node_smsg_msg_tx.
-      forwards*: equiv_disjunct.
+      forwards: tx_rx_false... forwards: node_smsg_msg_tx...
+      forwards: (equiv_disjunct). eassumption.
       edestruct (strand_prev_imp_succ [] min (-g) [(+g); (+g)]) 
-        as [pred [plt psmsg]]...
-      forwards*: (origin_nosucc_st). erewrite (node_smsg_msg_tx min g) in *.
+        as [pred [plt psmsg]]. auto. auto. eauto.
+      forwards: (origin_nosucc_st). eassumption. eassumption.
+      erewrite (node_smsg_msg_tx min g) in *.
       rewrite (node_smsg_msg_rx pred g) in *. contradiction.
-      auto. auto.
+      auto. auto. auto. auto.
     SCase "C".
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]... 

@@ -98,7 +98,6 @@ Proof.
 Qed.
 Hint Resolve eq_nodes.
 
-
 Lemma nodes_eq : forall x y : Node,
 x = y ->
 index(x) = index(y) /\
@@ -129,7 +128,6 @@ Proof.
 Qed.
 Hint Resolve node_imp_strand_nonempty.
 
-
 Lemma index_len_node : forall n,
 (index n) < length (strand n).
 Proof.
@@ -138,7 +136,22 @@ Proof.
 Qed.
 Hint Resolve index_len_node.
 
-Lemma node_indexing_equiv : forall n,
+Lemma nth_error_val {X:Type}: forall (l: list X) i,
+i < length l ->
+exists v, nth_error l i = Some v.
+Proof.
+  intros l.
+  induction l.
+  intros i lt. simpl in lt. omega.
+  intros i lt.
+  destruct i.
+  exists a. simpl. auto.
+  destruct (IHl i). simpl in lt. omega.
+  exists x.
+  simpl. auto.
+Qed.
+
+ Lemma nth_error_node : forall n,
 nth_error (strand n) (index n) = Some (smsg n).
 Proof.
   intros n.
@@ -147,7 +160,22 @@ Proof.
   destruct x0.
   rewrite e. simpl. reflexivity.
 Qed.
-Hint Resolve node_indexing_equiv.
+
+Lemma nth_node : forall n s i d,
+strand n = s ->
+index n = i ->
+nth i s d = smsg n.
+Proof.
+  intros n s i d seq idx.
+  erewrite <- nth_default_eq.
+  unfold nth_default. 
+  destruct (nth_error_val s i). 
+  rewrite <- seq. rewrite <- idx. apply index_len_node.
+  rewrite H. rewrite <- seq in H.
+  rewrite <- idx in H. rewrite nth_error_node in H.
+  inversion H; auto.
+Qed.
+Hint Resolve nth_node.
 
 Lemma strand_node : forall (s: Strand) (i: nat),
 i < length s ->
@@ -536,7 +564,6 @@ Proof.
   constructor. auto.
   constructor 2. auto.
 Qed.
-Hint Resolve ssedge_builds_ssedge'.
 
 Lemma ssedge_dec : forall x y,
 {x =-> y} + {~x =-> y}.
@@ -563,9 +590,13 @@ Lemma ssedge'_dec : forall N x y,
 {x =[N]-> y} + {~x =[N]-> y}.
 Proof.
   intros N x y.
-  destruct (ssedge_dec x y);
+  destruct (ssedge_dec x y).
   destruct (set_In_dec eq_node_dec x N);
-  destruct (set_In_dec eq_node_dec y N); eauto.
+  destruct (set_In_dec eq_node_dec y N). 
+  forwards: (ssedge_builds_ssedge' N x y). auto. auto.
+  auto. auto. right. intros contra. eauto.
+  right. intros contra. eauto. right. intros contra. eauto.
+  right. intros contra. eauto.
 Qed.
 Hint Resolve ssedge'_dec.
 
@@ -846,7 +877,6 @@ Proof.
       SSCase "x <> y". eapply t_trans. apply IHpatheqxy1. exact neqxy.
         apply IHpatheqxy2. exact neqyz.
 Qed.      
-Hint Resolve neq_sspatheq_imp_sspath.
 
 Lemma sspatheq_trans_cycle : forall (x y: Node),
 x <> y ->
@@ -864,22 +894,7 @@ Proof.
     exact patheqyx.
 Qed.
 Hint Resolve sspatheq_trans_cycle.
-(*
-Lemma Origin_imp_strict_defs : forall I t n,
-(forall t', t <st t' <-> In Msg I t') ->
-Origin t n ->
-Origin_with_Ex_Set t n.
-Proof.
-  intros I t n Iprop Orig.
-  exists I. split. exact Iprop.
-  destruct Orig as [ntx [nsub nosucc]].
-  split. exists (msg n).
-  split. apply Iprop in nsub. exact nsub.
-  destruct ntx. erewrite node_smsg_msg_tx. exact H. exact H.
-  intros n' succ contraIn.
-  apply nosucc in succ. apply Iprop in contraIn. contradiction.
-Qed.
-*)
+
 Definition set_reflexive 
            { X:Type} 
            (s:set X)
@@ -1279,12 +1294,10 @@ Proof.
   intros min actual_content seq.
   assert (length (strand min) = 1) as len. rewrite seq. auto.
   assert ((index min) = 0) as imin. 
-  remember (index_len_node min). omega. 
-  assert (nth_error (strand min) (index min) = Some (smsg min)) as ntheq. 
-  apply node_indexing_equiv.
-  rewrite seq in ntheq. rewrite imin in ntheq. simpl in ntheq.
-  inversion ntheq as [msmsg].
-  auto.
+  remember (index_len_node min). omega.
+  forwards: (nth_node min). eauto. eauto.
+  simpl in *. congruence.
+Grab Existential Variables. assumption.
 Qed.
 Hint Resolve particular_min_smsg.
 
@@ -1312,7 +1325,7 @@ Lemma node_strand_3height_opts : forall (n:Node) (sm1 sm2 sm3:SMsg),
 Proof. 
   intros.
   assert ((index n) = 0 \/ (index n) = 1 \/ (index n) = 2 \/ (index n) > 2). omega. 
-  destruct H0; forwards*: (node_indexing_equiv n).
+  destruct H0; forwards*: (nth_node n).
   rewrite H0 in *. rewrite H in *. simpl in *; inversion H1.
   left. auto. destruct H0.
   rewrite H0 in *. rewrite H in *. simpl in *; inversion H1.
@@ -1321,6 +1334,7 @@ Proof.
   right. right. auto.
   destruct n. simpl in *. assert (length (fst x) = 3). rewrite H. 
   simpl. reflexivity. omega.
+Grab Existential Variables. assumption. assumption.
 Qed.
 Hint Resolve node_strand_3height_opts.
 
@@ -1342,7 +1356,7 @@ Lemma node_smsg_in_strand : forall n s,
 List.In (smsg n) s.
 Proof.
   intros.
-  forwards*: (node_indexing_equiv n).
+  forwards*: (nth_error_node n).
   eapply nth_error_some_In. subst. exact H0.
 Qed.  
 Hint Resolve node_smsg_in_strand.
@@ -1374,9 +1388,10 @@ strand n = h :: t ->
 smsg n = h.
 Proof.
   intros h t n indx streq.
-  forwards*: (node_indexing_equiv n).  
+  forwards*: (nth_node n).  
   rewrite indx in *. rewrite streq in *.
   simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
 Qed.
 Hint Resolve smsg_strand_head.  
 
@@ -1393,18 +1408,18 @@ Proof with eauto.
   apply (Hnopred n').
   eapply spath_from_props...
   assert (index n = 0 \/ index  n > 0) as [Hi0 | Higr0]. omega.
-  forwards*: (node_indexing_equiv n).
+  forwards*: (nth_node n).
   rewrite streq in *. rewrite Hi0 in *.
   simpl in *. inversion H0.
   forwards*: tx_rx_false. auto.
-  forwards*: (node_indexing_equiv n').
+  forwards*: (nth_node n').
   rewrite seq in *. rewrite streq in *.
   rewrite n'indx in *. simpl in *.
   inversion H0.
   forwards*: node_smsg_msg_rx. rewrite <- seq in *.
   forwards: smsg_strand_head. eauto. eauto.
   erewrite (node_smsg_msg_rx n' g) in *. auto. auto.
-Grab Existential Variables.
+Grab Existential Variables. exact (+g). exact (+g).
   simpl. rewrite streq. simpl. omega. 
 Qed.
 Hint Resolve no_origin_after_rx.
@@ -1522,7 +1537,7 @@ index x < length sf ->
 List.In (smsg x) sf.
 Proof.
   intros x sf sb seq indle.
-  forwards*: (node_indexing_equiv x).
+  forwards*: (nth_error_node x).
   rewrite seq in *.
   forwards: (nth_error_nth (sf ++ sb) (index x) (smsg x)). auto.
   forwards*: (nth_In).
@@ -1585,20 +1600,20 @@ Proof.
   tryfalse. destruct inxxs. tryfalse.
   remember (strand_halfs_index n f (x :: xs) seq notIn) as greq.
   inversion greq.
-  forwards: (node_indexing_equiv n).
+  forwards: (nth_error_node n).
   subst. rewrite seq in *. rewrite <- H2 in *.
   forwards*: strand_halfs_index.
   erewrite (nth_app_snd SMsg f (x :: xs)) in *.
   rewrite minus_diag in *.
   simpl in *. forwards*: (value_Some (smsg n) x).
-  forwards: (node_indexing_equiv n).
+  forwards: (nth_error_node n).
   subst. rewrite seq in *. rewrite <- H1 in *.
   forwards*: strand_halfs_index.
   destruct (strand_node (strand n) (length f)) as [n' [ns ni]]. rewrite seq.
   rewrite app_length. simpl. omega.
   exists n'. split.
   apply prev_facts_imp_prev. auto. omega.
-  forwards*: (node_indexing_equiv n').
+  forwards*: (nth_error_node n').
   rewrite ni in *. rewrite seq in *. rewrite ns in *.
   erewrite (nth_app_snd SMsg f (x :: xs)) in *.
   rewrite minus_diag in *.  simpl in *. eauto. omega.
@@ -1618,20 +1633,20 @@ Proof.
   tryfalse. destruct inxxs. tryfalse.
   remember (strand_halfs_index n f (x :: xs) seq notIn) as greq.
   inversion greq.
-  forwards: (node_indexing_equiv n).
+  forwards: (nth_error_node n).
   subst. rewrite seq in *. rewrite <- H2 in *.
   forwards*: strand_halfs_index.
   erewrite (nth_app_snd SMsg f (x :: xs)) in *.
   rewrite minus_diag in *.
   simpl in *. forwards*: (value_Some (smsg n) x).
-  forwards: (node_indexing_equiv n).
+  forwards: (nth_error_node n).
   subst. rewrite seq in *. rewrite <- H1 in *.
   forwards*: strand_halfs_index.
   destruct (strand_node (strand n) (length f)) as [n' [ns ni]]. rewrite seq.
   rewrite app_length. simpl. omega.
   exists n'. split.
   apply spath_from_props. omega. auto.
-  forwards*: (node_indexing_equiv n').
+  forwards*: (nth_error_node n').
   rewrite ni in *. rewrite seq in *. rewrite ns in *.
   erewrite (nth_app_snd SMsg f (x :: xs)) in *.
   rewrite minus_diag in *.  simpl in *. eauto. omega.
