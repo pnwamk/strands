@@ -18,6 +18,7 @@
  *)
 Require Import Logic List ListSet Arith Peano_dec Omega.
 Require Import Relation_Definitions Relation_Operators.
+Require Import ProofIrrelevance.
 Require Import CoLoRRelDec CoLoRRelSub.
 Require Import strictorder set_rep_equiv util.
 Require Import LibTactics.
@@ -49,6 +50,10 @@ Inductive Msg : Type :=
 (* [REF 2] pg 4 paragraph 3 (details of encryption and subterms) *)
 Hint Constructors Msg.
 
+Definition eq_msg_dec : forall x y : Msg,  
+  {x = y} + {x <> y}.
+Proof. decide equality. Qed.
+
 Notation "(! x )" := (msg_text x) : ss_scope. 
 Notation "(# k )" := (msg_key k) : ss_scope.
 Notation "x * y" := (msg_join x y) (at level 40, left associativity) : ss_scope.
@@ -58,7 +63,7 @@ Open Scope ss_scope.
 
 (* subterm relationship for messages *)
 (* subterm -> encompassing term -> Prop *)
-Inductive Subterm : Msg -> Msg -> Prop :=
+Inductive Subterm : relation Msg :=
 | st_refl : forall m, Subterm m m
 | st_join_l : forall st l r, 
                Subterm st l -> Subterm st (l*r)
@@ -80,6 +85,10 @@ Inductive SMsg : Type :=
    and the second a signed message. *)
 Hint Constructors SMsg.
 
+Definition eq_smsg_dec : forall x y : SMsg,  
+  {x = y} + {x <> y}.
+Proof. intros. decide equality; apply eq_msg_dec. Qed.
+
 Notation "(+ x )" := (msg_tx x) : ss_scope.
 Notation "(- x )" := (msg_rx x) : ss_scope.
 
@@ -89,6 +98,10 @@ Definition Strand : Type := list SMsg.
    Haven't hit a better def, and they start using strands
    pretty early so I'm rolling with this. *)
 
+Definition eq_strand_dec : forall x y : Strand,  
+  {x = y} + {x <> y}.
+Proof. intros. decide equality; apply eq_smsg_dec. Qed.
+
 (* node in a strand space *)
 Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
 (* [REF 1] Definition 2.3.1 pg 6
@@ -96,6 +109,20 @@ Definition Node : Type := {n: (Strand * nat) | (snd n) < (length (fst n))}.
      NOTE: changed to be 0 based instead of 1 based sequences
    -"node <s,i> belongs to strand s"
    -"Every node belongs to a unique strand" *)
+
+Definition eq_node_dec : forall x y : Node,
+ {x = y} + {x <> y}.
+Proof.
+  intros [[xs xn] xp] [[ys yn] yp].
+  destruct (eq_strand_dec xs ys) as [EQs | NEQs]; subst.
+  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
+  left. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
+
+  right. intros C. inversion C. auto.
+  right. intros C. inversion C. auto.
+Qed.
+Hint Resolve eq_node_dec.
+
 
 Definition Edge : Type := (prod Node Node).
 
@@ -336,6 +363,11 @@ Notation "a <{ B }< b"
 Notation "a <{ B }<* b" 
   := (SSPathEq' (Nodes B) a b) (at level 0, right associativity) : ss_scope.
 
+Definition Bheight (B:Bundle) (s:Strand) (h:nat) : Prop :=
+forall n:Node, index n < h ->
+               strand n = s ->
+               set_In n (Nodes B).
+
 Definition set_minimal (B:Bundle) (N:set Node) (n:Node) : Prop :=
 subset N (Nodes B) /\
 set_In n N /\ 
@@ -345,42 +377,22 @@ Definition OccursIn (t:Msg) (n:Node) : Prop :=
  t <st msg(n).
  (* [REF 1] Definition 2.3.5 pg 6
    "An unsigned term t occurs in n iff t is a subterm of the term of n" *)
-(* Bookmark *)
 
 Definition EntryPoint (n:Node) (tP: Msg -> Prop) : Prop := 
-exists t, tP t /\ smsg n = (+t) 
+tP (msg n) 
+/\ is_tx n
 /\ forall n', n' ==>+ n -> ~ tP (msg n').
 
 Definition Origin (t:Msg) (n:Node) : Prop :=
 EntryPoint n (fun t' => t <st t').
 
-(*
-Section OriginAlt.
-Require Import Ensembles.
+Definition SecretIn (t:Msg) (B:Bundle) : Prop :=
+forall n, set_In n (Nodes B) ->
+          msg n <> t.
+(* [REF 1] pg 16
+   "A value x is secret in a bundle C if for every
+    n in C, term(n) <> x." *)
 
-(* As close to paper def as possible *)
-Definition EntryPoint (n:Node) (I: Ensemble Msg) : Prop :=
-(exists t, In Msg I t /\ smsg(n) = (+ t))
-/\ forall n', n' << n -> ~ In Msg I (msg(n')).
- (* [REF 1] Definition 2.3.6 pg 6
-   "Suppose I is a set of unsigned terms. The node n is an entrypoint for I
-    iff term(n) = +t for some t in I, and forall n' s.t. n' =>+ n, term(n')
-    is not in I." *)
-
-(* As close to paper def as possible *)
-Definition Origin_with_Ex_Set (t:Msg) (n:Node) : Prop :=
-exists I, (forall t', t <st t' <-> In Msg I t')
-/\ EntryPoint n I.
- (* [REF 1] Definition 2.3.7 pg 6
-   "An unsigned term t originates on n iff n is an entry point
-    for the set I = {t' : t is a subterm of t'}" *)
-End OriginAlt.
-
-Definition Origin (t:Msg) (n:Node) : Prop :=
-is_tx n
-/\ t <st msg(n)
-/\ forall n', n' << n -> ~t <st msg(n').
-*)
 Definition UniqOrigin (t:Msg) : Prop :=
 exists n, Origin t n
 /\ forall m, Origin t m -> n = m.
@@ -451,18 +463,18 @@ Variable PenetratorModel : Strand -> Prop.
  Hypothesis penetrator_behaviour : 
    forall s, PenetratorStrand s -> PenetratorModel s.
 
-(* Keys known to penetrators *)
-Variable PKeys : set Key.
+(* Hidden Keys, not initially known to penetrators *)
+Variable HKeys : set Key.
 
-(* Texts known to penetrators (allows for nonces, etc...) *)
-Variable PTexts : set Text.
+(* Hidden Texts, not initially known to penetrators (allows for nonces, etc...) *)
+Variable HTexts : set Text.
 
 Open Scope list_scope.
 Import ListNotations.
 
 Inductive DolevYao : Strand -> Prop :=
 | DY_M : forall s t, 
-           ~ set_In t PTexts ->
+           ~ set_In t HTexts ->
            s = [ (+(!t)) ] -> 
            DolevYao s
 | DY_F : forall s g, 
@@ -478,7 +490,7 @@ Inductive DolevYao : Strand -> Prop :=
            s = [(-g*h) ; (+g) ; (+h)] ->
            DolevYao s
 | DY_K : forall s k,
-           set_In k PKeys ->
+           ~set_In k HKeys ->
            s = [(+ (#k))] ->
            DolevYao s
 | DY_E : forall s h k,
@@ -491,6 +503,18 @@ Inductive DolevYao : Strand -> Prop :=
 (* [REF 1] Definition 3.1
     The set of atomic actions/traces a penetrator
     may perform. *)
+
+
+Definition msg_filter 
+           {MP : Msg -> Prop}
+           (MPdec : forall x, {MP x} + {~ MP x})
+           (s : set Node) : set Node :=
+  filter (fun n => if MPdec (msg n)
+                   then true 
+                   else false) 
+         s.
+           
+
 
 End SS.
 

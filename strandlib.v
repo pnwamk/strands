@@ -12,26 +12,33 @@ Open Scope list_scope.
 Import ListNotations.
 Open Scope ss_scope.
 
-Definition eq_msg_dec : forall x y : Msg,  
-  {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Qed.
-Hint Resolve eq_msg_dec.
 
-Definition eq_smsg_dec : forall x y : SMsg,  
-  {x = y} + {x <> y}.
-Proof.
- intros. decide equality.
-Qed. 
-Hint Resolve eq_smsg_dec.
+Hint Resolve eq_msg_dec eq_smsg_dec eq_strand_dec.
 
-Definition eq_strand_dec : forall x y : Strand,  
-  {x = y} + {x <> y}.
+Lemma filter_subset {X:Type} : 
+(forall x y : X, {x=y} + {x<>y}) ->
+forall f (l: list X),
+subset (filter f l) l.
 Proof.
- intros. decide equality.
+  intros.
+  unfold subset.
+  intros x xInfil.
+  induction l.
+  simpl in *. tryfalse.
+  destruct (X0 a x). subst.
+  left. reflexivity.
+  right. apply IHl.
+  simpl in xInfil.
+  destruct (f a). simpl in xInfil.
+  destruct xInfil. tryfalse.
+  auto. auto.
 Qed.
-Hint Resolve eq_strand_dec.
+
+Lemma index_lt_1_imp_0 : forall n,
+index n < 1 -> index n = 0.
+Proof.
+  intros n lt. omega.
+Qed.
 
 Lemma node_smsg_msg_tx : forall n t,
 smsg(n) = (+ t) ->
@@ -72,20 +79,6 @@ Proof.
   congruence.
 Qed.
 Hint Resolve rx_imp_smsg_eq.
-
-
-Definition eq_node_dec : forall x y : Node,
- {x = y} + {x <> y}.
-Proof.
-  intros [[xs xn] xp] [[ys yn] yp].
-  destruct (eq_strand_dec xs ys) as [EQs | NEQs]; subst.
-  destruct (eq_nat_dec xn yn) as [EQn | NEQn]; subst.
-  left. rewrite (proof_irrelevance (lt yn (length ys)) xp yp). reflexivity.
-
-  right. intros C. inversion C. auto.
-  right. intros C. inversion C. auto.
-Qed.
-Hint Resolve eq_node_dec.
 
 Lemma eq_nodes : forall x y : Node,
 index(x) = index(y) ->
@@ -1035,12 +1028,13 @@ N' <> [] ->
 exists min, set_minimal B N' min.
 Proof.
   intros B N' sub nempty.
-  forwards*: (minimal_set_mem Node 
-                              eq_node_dec
-                              (SSPath' (Nodes B))
-                              (sspath'_dec B)
-                              (sspath'_strict_order B) 
-                              N').
+  forwards*: (minimal_set_mem 
+                Node 
+                eq_node_dec
+                (SSPath' (Nodes B))
+                (sspath'_dec B)
+                (sspath'_strict_order B) 
+                N').
   destruct H. tryfalse. destruct H.
   exists x.
   split. auto. split. iauto. iauto.  
@@ -1144,7 +1138,106 @@ Proof.
 Qed.
 Hint Resolve minimal_is_tx.
 
-Hint Unfold set_minimal.
+(* Lemma 2.8 convenient consequence *)
+Lemma msg_filter_min_tx : 
+  forall
+    (MP : Msg -> Prop) 
+    (MPdec : forall x, {MP x} + {~MP x})
+    (B : Bundle),
+forall n, set_minimal B (msg_filter MPdec (Nodes B)) n ->
+is_tx n.
+Proof.
+  intros MP MPdec B n nmin.
+  apply (minimal_is_tx B (msg_filter MPdec (Nodes B))).
+  unfold msg_filter. apply filter_subset.
+  auto. intros m m' [mIn [m'In msgeq]]. split; intros H.
+  unfold msg_filter in *.
+  remember (fun n0 : Node => if MPdec (msg n0) 
+                             then true 
+                             else false) as f.
+  destruct (filter_In 
+              f
+              m 
+              (Nodes B)) as [InImp ImpIn].
+  destruct (filter_In 
+              f
+              m'
+              (Nodes B)) as [InImp' ImpIn'].
+  apply InImp in H. destruct H. subst f.
+  rewrite msgeq in *. destruct (MPdec (msg m')).
+  forwards: ImpIn'. auto. auto. tryfalse.
+  unfold msg_filter in *.
+  remember (fun n0 : Node => if MPdec (msg n0) 
+                             then true 
+                             else false) as f.
+  destruct (filter_In 
+              f
+              m 
+              (Nodes B)) as [InImp ImpIn].
+  destruct (filter_In 
+              f
+              m'
+              (Nodes B)) as [InImp' ImpIn'].
+  apply InImp' in H. destruct H. subst f.
+  rewrite <- msgeq in *. destruct (MPdec (msg m)).
+  forwards: ImpIn. auto. auto. tryfalse. auto.
+Qed.
+Hint Resolve msg_filter_min_tx.
+
+Lemma in_msg_filter : 
+  forall 
+    (n:Node)
+    (MP : Msg -> Prop) 
+    (MPdec : forall x, {MP x} + {~MP x})
+    (B : Bundle)
+    (N': set Node),
+N' = (msg_filter MPdec (Nodes B)) ->
+set_In n N' ->
+MP (msg n).
+Proof.
+  intros n MP MPdec B N' N'eq nIn.
+  unfold msg_filter in *.
+  remember (fun n : Node => if MPdec (msg n) 
+                             then true 
+                             else false) as f.
+  destruct (filter_In 
+              f
+              n
+              (Nodes B)) as [InImp ImpIn].
+  subst f. destruct (MPdec (msg n)). auto.
+  rewrite N'eq in *.
+  apply InImp in nIn. destruct nIn. tryfalse.
+Qed.  
+
+Lemma eq_msg_in_msg_filter : 
+  forall
+    (n n':Node) 
+    (MP : Msg -> Prop) 
+    (MPdec : forall x, {MP x} + {~MP x})
+    (B : Bundle)
+    (N': set Node),
+set_In n' (Nodes B) ->
+msg n = msg n' ->
+N' = (msg_filter MPdec (Nodes B)) ->
+set_In n N' ->
+set_In n' N'.
+Proof.
+  intros n n' MP MPdec B N' n'IN msgeq N'eq nIn.
+  forwards: (in_msg_filter n MP MPdec B N'). auto. auto.
+  rewrite msgeq in *.
+  unfold msg_filter in *.
+  remember (fun n : Node => if MPdec (msg n) 
+                             then true 
+                             else false) as f.
+  destruct (filter_In 
+              f
+              n'
+              (Nodes B)) as [InImp ImpIn].
+  rewrite N'eq in *.
+  apply ImpIn.
+  split; auto. subst f. destruct (MPdec (msg n')); auto; tryfalse.
+Qed.
+
 
 (* Lemma 2.9 originating occurrence at minimal element *)
 Lemma min_origin : forall B N' n t,
@@ -1173,15 +1266,15 @@ Proof.
   destruct (N'defb m' Hin).
   apply N'deff. split. auto. congruence.
   eassumption. iauto.
-  exists (msg n). split. auto.
-  split. forwards: minimal_is_tx. destruct nmin; iauto.
+  split. assumption. split.
+  forwards: minimal_is_tx. destruct nmin; iauto.
   intros j k [Hin [Hin2 msgeq]].
   split; intros HIn.
   forwards: (N'defb j); auto. apply N'deff. split. auto.
   rewrite msgeq in *. iauto.
   forwards: (N'defb k); auto. apply N'deff. split. auto.
   rewrite msgeq in *. iauto.
-  eassumption. eauto.
+  eassumption. assumption.
   intros n' n'edge contrast.
   destruct nmin as [inB [inN' nopred]].
   forwards: bundle_pred_pred'. eassumption. eauto.
@@ -1257,7 +1350,13 @@ Theorem align_dec : forall s,
 Proof.
   intros s. destruct (set_In_dec eq_strand_dec s Protocol); auto.
 Qed.
-Hint Resolve align_dec.
+
+Theorem align_node_dec : forall n,
+{RegularNode n} + {PenetratorNode n}.
+Proof.
+  intros n. unfold PenetratorNode. unfold RegularNode.
+  apply align_dec.
+Qed.
 
 Lemma origin_tx : forall n t,
 Origin t n ->
@@ -1272,7 +1371,7 @@ Lemma origin_st : forall n t,
 Origin t n -> t <st msg n. 
 Proof.
   intros n t orig.
-  destruct orig as [t' [st [tx nopredst]]].
+  destruct orig as [st [tx nopredst]].
   forwards: node_smsg_msg_tx. eauto. congruence.
 Qed.
 Hint Resolve origin_st.
@@ -1281,7 +1380,7 @@ Lemma origin_nosucc_st : forall n t,
 Origin t n ->
 forall n', n' ==>+ n -> ~ t <st msg n'.
 Proof.
-  intros n t orig. destruct orig as [t' [st [tx nopredst]]]. 
+  intros n t orig. destruct orig as [st [tx nopredst]]. 
   auto.
 Qed.
 Hint Resolve origin_nosucc_st.
@@ -1382,18 +1481,158 @@ Proof.
 Qed.
 Hint Resolve hd_pred_all.
 
-Lemma smsg_strand_head : forall h t n,
+Lemma smsg_index_0 : forall n x0 rest,
 index n = 0 ->
-strand n = h :: t ->
-smsg n = h.
+strand n = x0 :: rest ->
+smsg n = x0.
 Proof.
-  intros h t n indx streq.
+  intros n x0 rest indx streq.
   forwards*: (nth_node n).  
   rewrite indx in *. rewrite streq in *.
   simpl in *. inversion H; auto.  
 Grab Existential Variables. assumption.
 Qed.
-Hint Resolve smsg_strand_head.  
+Hint Resolve smsg_index_0.
+
+Lemma msg_index_0 : forall n x0 rest,
+index n = 0 ->
+strand n = x0 :: rest ->
+msg n = smsg_msg x0.
+Proof.
+  intros n x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve msg_index_0.
+
+Lemma smsg_index_1 : forall n x1 x0 rest,
+index n = 1 ->
+strand n = x0 :: x1 :: rest ->
+smsg n = x1.
+Proof.
+  intros n x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve smsg_index_1.
+
+Lemma msg_index_1 : forall n x1 x0 rest,
+index n = 1 ->
+strand n = x0 :: x1 :: rest ->
+msg n = smsg_msg x1.
+Proof.
+  intros n x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve smsg_index_1.
+
+Lemma smsg_index_2 : forall n x2 x1 x0 rest,
+index n = 2 ->
+strand n = x0 :: x1 :: x2 :: rest ->
+smsg n = x2.
+Proof.
+  intros n x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve smsg_index_2.
+
+Lemma msg_index_2 : forall n x2 x1 x0 rest,
+index n = 2 ->
+strand n = x0 :: x1 :: x2 :: rest ->
+msg n = smsg_msg x2.
+Proof.
+  intros n x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve msg_index_2.
+
+Lemma smsg_index_3 : forall n x3 x2 x1 x0 rest,
+index n = 3 ->
+strand n = x0 :: x1 :: x2 :: x3 :: rest ->
+smsg n = x3.
+Proof.
+  intros n x3 x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve smsg_index_3.
+
+Lemma msg_index_3 : forall n x3 x2 x1 x0 rest,
+index n = 3 ->
+strand n = x0 :: x1 :: x2 :: x3 :: rest ->
+msg n = smsg_msg x3.
+Proof.
+  intros n x3 x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve msg_index_3.
+
+Lemma smsg_index_4 : forall n x4 x3 x2 x1 x0 rest,
+index n = 4 ->
+strand n = x0 :: x1 :: x2 :: x3 :: x4 :: rest ->
+smsg n = x4.
+Proof.
+  intros n x4 x3 x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve smsg_index_4.
+
+Lemma msg_index_4 : forall n x4 x3 x2 x1 x0 rest,
+index n = 4 ->
+strand n = x0 :: x1 :: x2 :: x3 :: x4 :: rest ->
+msg n = smsg_msg x4.
+Proof.
+  intros n x4 x3 x2 x1 x0 rest indx streq.
+  forwards*: (nth_node n).  
+  rewrite indx in *. rewrite streq in *.
+  simpl in *. inversion H; auto.  
+Grab Existential Variables. assumption.
+Qed.
+Hint Resolve msg_index_4.
+
+Lemma index_strand_len_1 : forall n g,
+strand n = [g] ->
+index n = 0.
+Proof.
+  intros n g seq.
+  remember (index n) as ind.
+  destruct n. simpl in *. rewrite seq in *.
+  simpl in *. omega.
+Qed.
+
+Lemma origin_tx_head : forall n g rest,
+index n = 0 ->
+strand n = (+g) :: rest ->
+Origin g n.
+Proof.
+  intros n g rest ind seq.
+  forwards: msg_index_0. eauto. eauto.
+  split. simpl in *. rewrite H. auto.
+  split. eauto.
+  intros n' edge.
+  forwards: spath_imp_index_lt. eauto. omega.
+Qed.
 
 Lemma no_origin_after_rx : forall n g rest,
 (strand n) = (-g) :: rest ->
@@ -1404,7 +1643,7 @@ Proof with eauto.
   assert (exists n', strand n' = strand n /\ index n' = 0) as exn'.
   eexists (exist _ ((strand n), 0) _)... 
   destruct exn' as [n' [seq n'indx]].
-  destruct orig as [t' [Hst [Htx Hnopred]]].
+  destruct orig as [Hst [Htx Hnopred]].
   apply (Hnopred n').
   eapply spath_from_props...
   assert (index n = 0 \/ index  n > 0) as [Hi0 | Higr0]. omega.
@@ -1417,7 +1656,7 @@ Proof with eauto.
   rewrite n'indx in *. simpl in *.
   inversion H0.
   forwards*: node_smsg_msg_rx. rewrite <- seq in *.
-  forwards: smsg_strand_head. eauto. eauto.
+  forwards: smsg_index_0. eauto. eauto.
   erewrite (node_smsg_msg_rx n' g) in *. auto. auto.
 Grab Existential Variables. exact (+g). exact (+g).
   simpl. rewrite streq. simpl. omega. 
@@ -1653,6 +1892,22 @@ Proof.
 Qed.
 Hint Resolve strand_prev_imp_succ.
 
+Lemma neq_st_t_false : forall t1 t2,
+t1 <> t2 ->
+~(!t1) <st (!t2).
+Proof.
+  intros t1 t2 neeq st.
+  inversion st. auto.
+Qed.
+
+Lemma neq_term_st_false : forall m t,
+m <> (!t) ->
+~ m <st (!t).
+Proof.
+  intros m t neq st.
+  inversion st. auto.
+Qed.
+
 Lemma no_st_l_r : forall l r t,
 ~ t <st l ->
 ~ t <st r ->
@@ -1671,6 +1926,14 @@ Proof.
 Qed.  
 Hint Resolve key_st_key.
 
+Lemma txt_st_txt : forall t t',
+(!t) <st (!t') -> t = t'.
+Proof. 
+  intros. inversion H; auto.
+Qed.  
+Hint Resolve key_st_key.
+
+
 Lemma no_encr_st : forall a b k,
 ~ a <st b ->
 a <> {b}^[k] ->
@@ -1681,9 +1944,20 @@ Proof.
 Qed.
 Hint Resolve no_encr_st.
 
+Lemma encr_st : forall a b k,
+a <> {b}^[k] ->
+a <st {b}^[k] ->
+a <st b.
+Proof.
+  intros a b k neq st. 
+  inversion st. contradiction. auto.
+Qed.
+Hint Resolve encr_st.
+
+
 Lemma DolevYao_disjunction : forall s,
 DolevYao s ->
-((exists t, ~ set_In t PTexts /\ s = [ (+(!t)) ])
+((exists t, ~ set_In t HTexts /\ s = [ (+(!t)) ])
  \/ 
  (exists g, s = [(-g)])
  \/ 
@@ -1693,7 +1967,7 @@ DolevYao s ->
  \/
  (exists g h, s = [(-g*h) ; (+g) ; (+h)])
  \/ 
- (exists k, set_In k PKeys /\ s = [(+ (#k))])
+ (exists k, ~set_In k HKeys /\ s = [(+ (#k))])
  \/ 
  (exists h k, s = [(- (#k)) ; (-h) ; (+ {h}^[k])])
  \/ 
@@ -1707,24 +1981,4 @@ Proof.
          k' kunk seq minstrand |
          h k' seq minstrand |
          h k' k'' inv seq minstrand]; iauto. 
-Qed.
-
-
-Lemma filter_subset {X:Type} : 
-(forall x y : X, {x=y} + {x<>y}) ->
-forall f (l: list X),
-subset (filter f l) l.
-Proof.
-  intros.
-  unfold subset.
-  intros x xInfil.
-  induction l.
-  simpl in *. tryfalse.
-  destruct (X0 a x). subst.
-  left. reflexivity.
-  right. apply IHl.
-  simpl in xInfil.
-  destruct (f a). simpl in xInfil.
-  destruct xInfil. tryfalse.
-  auto. auto.
 Qed.

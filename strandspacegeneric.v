@@ -22,7 +22,7 @@ Open Scope ss_scope.
    for any penetrator node p in C, k is not a subterm
    of the term of p." *)
 Theorem non_origin_imp_non_subterm : forall B k,
-~ set_In k PKeys ->
+set_In k HKeys ->
 (forall n, Origin (#k) n -> ~ RegularNode n) ->
 (forall n, set_In n (Nodes B) -> ~ (#k) <st msg(n)).
 Proof with eauto.
@@ -124,6 +124,7 @@ Proof with eauto.
       rewrite (node_smsg_msg_rx pred ({g}^[k''])) in *.
       rewrite (node_smsg_msg_tx min g) in *...
       auto.
+Grab Existential Variables. auto.
 Qed.
 
 End SimpleSpaces.
