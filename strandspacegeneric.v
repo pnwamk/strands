@@ -8,7 +8,7 @@ Require Import strandspace strandlib.
 
 Section SimpleSpaces.
 
-Hypothesis PModel : PenetratorModel = DolevYao.
+Hypothesis PModel : PenetratorModel = StandardPenetrator.
 
 Open Scope list_scope.
 Import ListNotations.
@@ -24,18 +24,18 @@ Open Scope ss_scope.
 Theorem non_origin_imp_non_subterm : forall B k,
 set_In k HKeys ->
 (forall n, Origin (#k) n -> ~ RegularNode n) ->
-(forall n, set_In n (Nodes B) -> ~ (#k) <st msg(n)).
+(forall n, set_In n (Nodes B) -> ~ (#k) <st term(n)).
 Proof with eauto.
   intros B k notInKp noOrigin n nInN st.
   remember B as bundle.
   destruct bundle as [N E ndN ndE valE predIncl Txincl uniqtx acyc]; simpl in *.
   assert (N = Nodes B) as NB. subst B. simpl; reflexivity.
   clear Heqbundle.
-  assert (forall x : Node, {(#k) <st msg x} + {~ (#k) <st msg x})
+  assert (forall x : Node, {(#k) <st term x} + {~ (#k) <st term x})
          as Pdec.
     intros x. apply st_dec.
   remember (fun n => if Pdec n then true else false) as f.
-  destruct (ex_filter_set Node (fun x => (#k) <st msg x) Pdec (Nodes B)) 
+  destruct (ex_filter_set Node (fun x => (#k) <st term x) Pdec (Nodes B)) 
     as [N' [N'incl N'P]].
   destruct N' as [| x N'].
    Case "Empty_set". 
@@ -50,11 +50,11 @@ Proof with eauto.
     split. auto. apply N'P. auto. auto.
     forwards: origin_tx. eassumption. 
     forwards: origin_st. eassumption.
-    forwards: (noOrigin). eassumption. forwards: (penetrator_behaviour).
+    forwards: (noOrigin). eassumption. forwards: nonreg_imp_pen. eauto. forwards: (penetrator_behaviour).
     eassumption.
     rewrite PModel in *.
-    (* Case analysis on DolevYao variants *)
-    edestruct (DolevYao_disjunction (strand min)) 
+    (* Case analysis on standard penetrator variants *)
+    edestruct (SP_disjunction (strand min)) 
       as [[g [tunk seq]] | 
           [[g seq] | 
           [[g seq] | 
@@ -64,54 +64,54 @@ Proof with eauto.
           [[h [k' seq]] | 
           [k' [k'' [g [inv seq]]]]]]]]]]]. auto.
     SCase "M & F".
-      rewrite (particular_min_msg seq) in *... eauto.
+      rewrite (particular_min_term seq) in *... eauto.
     SCase "T".
       forwards: no_origin_after_rx. eauto.
       edestruct (node_strand_3height_opts) as [rxg | txg]. eauto.
-      forwards: tx_rx_false... forwards: node_smsg_msg_tx...
+      forwards: tx_rx_false... forwards: node_sterm_term_tx...
       forwards: (equiv_disjunct). eassumption.
       edestruct (strand_prev_imp_succ [] min (-g) [(+g); (+g)]) 
-        as [pred [plt psmsg]]. auto. auto. eauto.
+        as [pred [plt psterm]]. auto. auto. eauto.
       forwards: (origin_nosucc_st). eassumption. eassumption.
-      erewrite (node_smsg_msg_tx min g) in *.
-      rewrite (node_smsg_msg_rx pred g) in *. contradiction.
+      erewrite (node_sterm_term_tx min g) in *.
+      rewrite (node_sterm_term_rx pred g) in *. contradiction.
       auto. auto. auto. auto.
     SCase "C".
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]... 
       edestruct (strand_prev_imp_succ [] min (-g) [(-h); (+g * h)]) 
-        as [pred [plt psmsg]]...
+        as [pred [plt psterm]]...
       forwards*: (origin_nosucc_st). 
       edestruct (strand_prev_imp_succ [(-g)] min (-h) [(+g * h)]) 
-        as [pred2 [p2lt p2smsg]]...
+        as [pred2 [p2lt p2sterm]]...
       forwards*: (origin_nosucc_st). 
-      rewrite (node_smsg_msg_tx min (g * h)) in *.
-      rewrite (node_smsg_msg_rx pred g) in *.
-      rewrite (node_smsg_msg_rx pred2 h) in *.
+      rewrite (node_sterm_term_tx min (g * h)) in *.
+      rewrite (node_sterm_term_rx pred g) in *.
+      rewrite (node_sterm_term_rx pred2 h) in *.
       apply (no_st_l_r g h (#k))... auto. auto. auto.
     SCase "S".
       forwards*: no_origin_after_rx.
       edestruct (node_strand_3height_opts) as [rxg | [rxh | txgh]]...
       edestruct (strand_prev_imp_succ [] min (-g * h) [(+g); (+h)]) 
-        as [pred [plt psmsg]]...
+        as [pred [plt psterm]]...
       forwards*: (origin_nosucc_st). 
-      rewrite (node_smsg_msg_rx pred (g * h)) in *.
-      rewrite (node_smsg_msg_tx min (g)) in *... auto.
+      rewrite (node_sterm_term_rx pred (g * h)) in *.
+      rewrite (node_sterm_term_tx min (g)) in *... auto.
       edestruct (strand_prev_imp_succ [] min (-g * h) [(+g); (+h)]) 
-        as [pred [plt psmsg]]...
+        as [pred [plt psterm]]...
       forwards*: (origin_nosucc_st). 
-      rewrite (node_smsg_msg_rx pred (g * h)) in *.
-      rewrite (node_smsg_msg_tx min (h)) in *... auto.
+      rewrite (node_sterm_term_rx pred (g * h)) in *.
+      rewrite (node_sterm_term_tx min (h)) in *... auto.
     SCase "K".
-      rewrite (particular_min_msg seq) in *. simpl in *.
+      rewrite (particular_min_term seq) in *. simpl in *.
       forwards*: (key_st_key k k'). subst. contradiction.
     SCase "E".
       edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
       edestruct (strand_prev_imp_succ [(-(#k'))] min (-h) [(+{h}^[k'])]) 
-        as [pred [plt psmsg]]...
+        as [pred [plt psterm]]...
       forwards*: (origin_nosucc_st). 
-      rewrite (node_smsg_msg_rx pred (h)) in *.
-      rewrite (node_smsg_msg_tx min {h}^[k']) in *.
+      rewrite (node_sterm_term_rx pred (h)) in *.
+      rewrite (node_sterm_term_tx min {h}^[k']) in *.
       forwards*: (no_encr_st (#k) h). auto. auto.
     SCase "D".
       edestruct (node_strand_3height_opts) as [rxk | [rxh | txhk]]...
@@ -119,10 +119,10 @@ Proof with eauto.
                                       min  
                                       (-{g }^[ k'']) 
                                       [(+g)]) 
-        as [pred [plt psmsg]]. auto. eauto. eauto.
+        as [pred [plt psterm]]. auto. eauto. eauto.
       forwards*: (origin_nosucc_st). 
-      rewrite (node_smsg_msg_rx pred ({g}^[k''])) in *.
-      rewrite (node_smsg_msg_tx min g) in *...
+      rewrite (node_sterm_term_rx pred ({g}^[k''])) in *.
+      rewrite (node_sterm_term_tx min g) in *...
       auto.
 Grab Existential Variables. auto.
 Qed.
