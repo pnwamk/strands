@@ -457,7 +457,7 @@ Proof.
               split. left. reflexivity.
               destruct mltnil as [mltnilIn mltnil].
               rewrite mltnil in contraInmlt. inversion contraInmlt.
-      SSCase "R x1 m".
+      SSCase "~R x1 m".
         exists m.
         split.
         destruct mltnil as [mltnilIn mltnil].

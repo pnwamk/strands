@@ -401,6 +401,29 @@ exists n, Origin t n
    "An unsigned term t is uniquely originating iff t originates on
     a unique n." *)
 
+Definition Ideal (I : set Term) (K: set Key) : Prop :=
+  forall h,
+    set_In h I ->
+    (forall g, (set_In (h * g) I /\ set_In (g * h) I)) /\
+    (forall k, set_In k K -> set_In {h}^[k] I).
+
+Definition IdealK (I : set Term) (K : set Key) (h : Term) : Prop :=
+Ideal I K /\
+set_In h I /\
+forall I', 
+  Ideal I' K ->
+  set_In h I' -> 
+  length I < length I'.
+
+Inductive SimpleTerm (t : Term) : Prop :=
+| sim_term_k : forall k, t = (#k) -> SimpleTerm t
+| sim_term_t : forall t', t = (!t') -> SimpleTerm t 
+| sim_term_c : forall k t', t = {t'}^[k] -> SimpleTerm t.
+
+
+Notation "a -{ B }-> b" 
+  := (Comm' (Nodes B) a b) (at level 0, right associativity)  : ss_scope.
+
 (* Axiom 1 -- provable in this context *)
 Theorem free_encryption : forall m1 m2 k1 k2,
 {m1}^[k1] = {m2}^[k2] -> m1 = m2 /\ k1 = k2.

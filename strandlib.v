@@ -15,6 +15,55 @@ Open Scope ss_scope.
 
 Hint Resolve eq_term_dec eq_sterm_dec eq_strand_dec.
 
+Lemma st_dec : forall a b,
+{a <st b} + {~ a <st b}.
+Proof.
+  intros a b.
+  induction b.
+  Case "b = txt".
+    destruct a.
+    SCase "a = txt".
+      destruct (eq_text_dec t t0).
+        subst t. left. auto.
+        right. intros contra. inversion contra. 
+        symmetry in H1. contradiction.
+    SCase "a = key". right. intros contra. inversion contra.
+    SCase "a = join". right. intros contra. inversion contra.
+    SCase "a = encr". right. intros contra. inversion contra.
+  Case "b = key".
+    destruct a.
+    SCase "a = txt". right. intros contra. inversion contra.
+    SCase "a = key".
+      destruct (eq_key_dec k k0).
+        subst k. left. auto.
+        right. intros contra. inversion contra. 
+        symmetry in H1. contradiction.
+    SCase "a = join". right. intros contra. inversion contra.
+    SCase "a = encr". right. intros contra. inversion contra.
+  Case "b = join".
+    destruct IHb1.
+    SCase "a <st b1". left. apply st_join_l. exact s.
+    SCase "~a <st b1". 
+      destruct IHb2.
+      SSCase "a <st b2". left. apply st_join_r. exact s.
+      SSCase "~a <st b2". 
+        destruct (eq_term_dec a (b1 * b2)).
+        SSSCase "a = b1 * b2".
+          subst a. left. constructor.
+        SSSCase "a <> b1 * b2".
+          right. intros contra. inversion contra; subst; try(contradiction).
+          apply n1. reflexivity.
+  Case "b = encr".
+    destruct IHb.
+      left. apply st_encr. exact s.
+      destruct (eq_term_dec a ({b}^[k])). subst.
+      left. constructor.
+      right. intros contra. inversion contra. subst.
+      apply n0. reflexivity.
+      contradiction.
+Qed.
+Hint Resolve st_dec.
+
 Lemma filter_subset {X:Type} : 
 (forall x y : X, {x=y} + {x<>y}) ->
 forall f (l: list X),
@@ -1122,15 +1171,13 @@ Proof.
 Qed.
 Hint Resolve bundle_pred_pred'.
 
-
-(* Lemma 2.8 - set minimal is tx *)
-Lemma minimal_is_tx : forall B N',
-subset N' (Nodes B) ->
-(forall m m' : Node, (set_In m (Nodes B)
-               /\ set_In m' (Nodes B)
-               /\ term(m) = term(m')) -> (* ADDED in N conditions *)
-               (set_In m N' <-> set_In m' N')) ->
-forall n, set_minimal B N' n ->
+(* Lemma 2.8' - set minimal is tx (exactly as stated in SS paper) *)
+Lemma minimal_is_tx' : forall B N',
+    subset N' (Nodes B) ->
+    (forall m m' : Node, 
+       term(m) = term(m') ->
+       (set_In m N' <-> set_In m' N')) ->
+    forall n, set_minimal B N' n ->
 is_tx n.
 Proof.
   intros B N' sub incl n setmin.
@@ -1142,9 +1189,8 @@ Proof.
   exists t. exact Heqnsterm.
   unfold ExistsUniqueTx in uniqtx.
   destruct (uniqtx n t) as [[x xpred] nRx]. auto. auto.
-  forwards: (incl n x). split. auto. split. iauto. symmetry. eauto.
-  forwards: (minnopre x). iauto.
-  assert False. apply H0. constructor. constructor. auto. contradiction. 
+  forwards: (minnopre x). eapply (incl x n). eauto. auto.
+  assert False. apply H. constructor. constructor. auto. contradiction.
 Qed.
 Hint Resolve minimal_is_tx.
 
@@ -1158,39 +1204,21 @@ forall n, set_minimal B (term_filter MPdec (Nodes B)) n ->
 is_tx n.
 Proof.
   intros MP MPdec B n nmin.
-  apply (minimal_is_tx B (term_filter MPdec (Nodes B))).
-  unfold term_filter. apply filter_subset.
-  auto. intros m m' [mIn [m'In termeq]]. split; intros H.
-  unfold term_filter in *.
-  remember (fun n0 : Node => if MPdec (term n0) 
-                             then true 
-                             else false) as f.
-  destruct (filter_In 
-              f
-              m 
-              (Nodes B)) as [InImp ImpIn].
-  destruct (filter_In 
-              f
-              m'
-              (Nodes B)) as [InImp' ImpIn'].
-  apply InImp in H. destruct H. subst f.
-  rewrite termeq in *. destruct (MPdec (term m')).
-  forwards: ImpIn'. auto. auto. tryfalse.
-  unfold term_filter in *.
-  remember (fun n0 : Node => if MPdec (term n0) 
-                             then true 
-                             else false) as f.
-  destruct (filter_In 
-              f
-              m 
-              (Nodes B)) as [InImp ImpIn].
-  destruct (filter_In 
-              f
-              m'
-              (Nodes B)) as [InImp' ImpIn'].
-  apply InImp' in H. destruct H. subst f.
-  rewrite <- termeq in *. destruct (MPdec (term m)).
-  forwards: ImpIn. auto. auto. tryfalse. auto.
+  destruct nmin as [sub2 [minIn minnopre]].
+  remember B as bundle.
+  destruct bundle as [N E ndN ndE valE predIncl Txincl uniqtx acyc]; simpl in *.
+  remember (sterm n) as nsterm. symmetry in Heqnsterm.
+  destruct nsterm.
+  exists t. exact Heqnsterm.
+  unfold ExistsUniqueTx in uniqtx.
+  destruct (uniqtx n t) as [[x xpred] nRx]. auto. auto.
+  forwards: (minnopre x).
+  unfold term_filter in minIn. apply filter_In in minIn.
+  destruct minIn.
+  forwards: (comm'_in_l N x n); auto.
+  eapply filter_In. split; auto.
+  erewrite (comm_term_eq x n). auto. eauto.
+  forwards: H. constructor. constructor. auto. tryfalse.
 Qed.
 Hint Resolve term_filter_min_tx.
 
@@ -1273,7 +1301,7 @@ Lemma min_origin : forall B N' n t,
            set_In m N') ->
 (forall m, set_In m N' -> 
            (set_In m (Nodes B)
-           /\ t <st (term(m)))) ->
+           /\ t <st (term(m)))) -> 
 set_minimal B N' n ->
 Origin t n.
 Proof.
@@ -1286,10 +1314,15 @@ Proof.
   destruct nmin as [Bsub [minIn nopred]].
   auto. apply N'defb. iauto.
   destruct B as [N E ndN ndE valE uniqtx acyc]; simpl in *.
-  intros m m' [mIn [m'In termeq]].
+  intros m m' termeq.
   split; intros Hin.
   destruct (N'defb m). auto.
-  apply N'deff. split. auto. congruence.
+  apply N'deff. split. 
+
+  apply N'defb. apply N'deff.
+
+
+auto. congruence.
   destruct (N'defb m' Hin).
   apply N'deff. split. auto. congruence.
   eassumption. iauto.
@@ -1309,55 +1342,6 @@ Proof.
   eapply (nopred n'). auto. auto. 
 Qed.
 Hint Resolve min_origin.
-
-Lemma st_dec : forall a b,
-{a <st b} + {~ a <st b}.
-Proof.
-  intros a b.
-  induction b.
-  Case "b = txt".
-    destruct a.
-    SCase "a = txt".
-      destruct (eq_text_dec t t0).
-        subst t. left. auto.
-        right. intros contra. inversion contra. 
-        symmetry in H1. contradiction.
-    SCase "a = key". right. intros contra. inversion contra.
-    SCase "a = join". right. intros contra. inversion contra.
-    SCase "a = encr". right. intros contra. inversion contra.
-  Case "b = key".
-    destruct a.
-    SCase "a = txt". right. intros contra. inversion contra.
-    SCase "a = key".
-      destruct (eq_key_dec k k0).
-        subst k. left. auto.
-        right. intros contra. inversion contra. 
-        symmetry in H1. contradiction.
-    SCase "a = join". right. intros contra. inversion contra.
-    SCase "a = encr". right. intros contra. inversion contra.
-  Case "b = join".
-    destruct IHb1.
-    SCase "a <st b1". left. apply st_join_l. exact s.
-    SCase "~a <st b1". 
-      destruct IHb2.
-      SSCase "a <st b2". left. apply st_join_r. exact s.
-      SSCase "~a <st b2". 
-        destruct (eq_term_dec a (b1 * b2)).
-        SSSCase "a = b1 * b2".
-          subst a. left. constructor.
-        SSSCase "a <> b1 * b2".
-          right. intros contra. inversion contra; subst; try(contradiction).
-          apply n1. reflexivity.
-  Case "b = encr".
-    destruct IHb.
-      left. apply st_encr. exact s.
-      destruct (eq_term_dec a ({b}^[k])). subst.
-      left. constructor.
-      right. intros contra. inversion contra. subst.
-      apply n0. reflexivity.
-      contradiction.
-Qed.
-Hint Resolve st_dec.
 
 (* Lemma 2.9 w/ term_filter *)
 Lemma term_filter_min_origin : 
@@ -1814,7 +1798,7 @@ Qed.
 Hint Resolve nth_error_nil_error.
 
 Lemma nth_error_nth {X:Type} : forall l i (v d : X),
-  nth_error l i = Some v -> nth i l d = v.
+nth_error l i = Some v -> nth i l d = v.
   intros l.
   induction l.
   intros i v d ntherr.

@@ -127,4 +127,34 @@ Proof with eauto.
 Grab Existential Variables. auto.
 Qed.
 
+(*
+Definition 6.1 immediate implication:
+
+g <st h iff h in (kIdeal g I)
+*)
+Lemma subterm_ideal_member : forall g h I K,
+IdealK I K g ->
+(g <st h <-> set_In h I).
+Proof.
+  intros g h I K Ikg.
+  split; intros H.
+  destruct Ikg as [Ik [gInI smallest]].
+  unfold Ideal in Ik.
+  destruct h. inversion H. congruence. inversion H. congruence.
+  induction H. auto.
+  eapply (Ik l). auto. eapply (Ik r). auto.
+  apply Ik. apply IHSubterm. auto. auto.
+
+destruct H.
+  induction H; subst; auto.
+  eapply (Ik l). apply IHSubterm. auto. auto.
+  eapply (Ik r). apply IHSubterm. auto. auto.
+  destruct K.
+  eapply (Ik t). apply IHSubterm. auto. auto.
+  
+  
+  eapply Ik.
+
+
+
 End SimpleSpaces.
